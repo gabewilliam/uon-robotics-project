@@ -13,7 +13,8 @@ int prevDirection = -1;
 
 task main()
 {
-
+	startTask(findLine);
+	startTask(driveStraight);
 }
 
 task driveStraight()
