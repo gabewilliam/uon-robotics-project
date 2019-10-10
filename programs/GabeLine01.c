@@ -9,6 +9,8 @@
 
 const long lightThreshold = 450;
 
+int prevDirection = -1;
+
 task main()
 {
 
@@ -19,12 +21,11 @@ task driveStraight()
 	long r,g,b;
 	long lightMag;
 
-	while (true){
+	while(true){
 		HTCS2readRawRGB(S3, true, r,g,b);
-
 		lightMag = sqrt(r*r+g*g+b*b);
 
-		while (lightMag < lightThreshold) {
+		while(lightMag < lightThreshold) {
 			setMotorSpeed(leftMotor, 10);
 			setMotorSpeed(rightMotor, 10);
 		}
@@ -33,5 +34,32 @@ task driveStraight()
 
 task findLine()
 {
+	long r,g,b;
+	long lightMag, prevMag, delta;
 	
+	while(true){
+		
+		prevMag = lightMag;
+		HTCS2readRawRGB(S3, true, r,g,b);
+		lightMag = sqrt(r*r+g*g+b*b);
+		delta = lightMag - prevMag;
+		
+		if(delta > 0){
+			prevDirection = prevDirection * -1;
+		}
+	
+		while(lightMag > lightThreshold) {
+		
+			//Need to turn to find track
+			setMotorSpeed(leftMotor, 0);
+			setMotorSpeed(rightMotor, 0);
+			
+			//try turning in the previous direction:
+			setMotorSpeed(leftMotor, 5*prevDirection);
+			setMotorSpeed(rightMotor, -5*prevDirection);
+			
+		
+		}
+		
+	}
 }
