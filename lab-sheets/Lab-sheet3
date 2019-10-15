@@ -8,48 +8,74 @@
 #include "HitechnicColorSensor.h"
 
 bool foundLine = false;
-long r,g,b;
-long avg;
-const edge = 450;
-long leftSpeed,rightSpeed;
-test wander(){
+long r,g,b,avg,delta;
+float leftSpeed = 0;
+float rightSpeed = 40;
+float spiralFactor = 0.5;
+const float target = 480;
+const float steeringMod = 0.03;
+const float botSpeed = 10;
+
+task wander(){
 
   while (!foundLine){
-      
+  		sleep(300);
+  		if (leftSpeed<40){
+  			leftSpeed += spiralFactor;
+  		}
+     //if (time1(T1) >= 5000){
+      // clearTimer(T1);
+      // if (rightSpeed >= 40){
+       //  long diff = rightSpeed - leftSpeed;
+         
+      //	 rightSpeed = rightSpeed-(diff*0.65);
+     //	}
+   	//	}
+   		
       HTCS2readRawRGB(S3, true, r,g,b);
       avg = (r+g+b)/3;
-      
-      leftSpeed = 4;
-      rightSpeed = 8;
-      
-      //setMotorSpeed(leftMotor, 4);
-      //setMotorSpeed(rightMotor, 8);
-   
-      if (avg ==  edge){
+
+      //setMotorSpeed(leftMotor, leftSpeed);
+      //setMotorSpeed(rightMotor, rightSpeed);
+
+      if (avg <=  target){
         foundLine = true;
-        leftSpeed = 0;
-        rightSpeed = 0;
-        //setMotorSpeed(leftMotor, 0);
-        //setMotorSpeed(rightMotor, 0);
+        setMotorSpeed(leftMotor, 0);
+        setMotorSpeed(rightMotor, 0);
       }
-     
+
   }
-  
+
 }
 
-test followLine() {
- //Gabe's code to go here for follow line
+task followLine() {
+	while(true){
+		while (foundLine){
+
+			HTCS2readRawRGB(S3, true, r,g,b);
+			avg = (r + g + b)/3;
+			delta = target - avg;
+
+			rightSpeed = botSpeed + (delta * steeringMod);
+			leftSpeed = botSpeed - (delta * steeringMod);
+
+			//setMotorSpeed(leftMotor, leftSpeed);
+			//setMotorSpeed(rightMotor, rightSpeed);
+
+		}
+		sleep(250);
+	}
 }
 
-test main(){
+task main(){
   startTask(wander);
   startTask(followLine);
-  
+
   while (true){
-    
+
     setMotorSpeed(leftMotor, leftSpeed);
     setMotorSpeed(rightMotor, rightSpeed);
-    
+
   }
-  
+
 }
