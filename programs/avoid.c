@@ -59,9 +59,12 @@ task followLine() {
 
 
 task avoid() {
+	bool avoidDone = false;
 	while (true){
 		sleep(200);
 		while(foundLine || avoidActive){	
+			
+			if (!avoidDone){
 			
 				if (getUSDistance(leftSonar) < 15){
 					
@@ -73,14 +76,27 @@ task avoid() {
 				}
 			
 				if (getUSDistance(leftSonar) > 15 && avoidActive){
+					avoidDone = true;
+					clearTimer(T1);
 					leftSpeed = botSpeed;
-					rightSpeed = botSpeed+10;
+					rightSpeed = botSpeed;
+					
 				}
 			
 				if (avg <= target && avoidActive){
 					avoidActive = false;	
 				}
+			} else {
+				if (time(T1) >= 1500){
+					leftSpeed=botSpeed;
+					rightSpeed = botSpeed+10;
+				}
 				
+				if (avg <= target && avoidActive){
+					avoidActive = false;	
+					avoidDone = false;
+				}
+			}
 		}
 	}
 }
