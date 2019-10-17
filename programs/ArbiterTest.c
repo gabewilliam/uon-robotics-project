@@ -16,6 +16,7 @@ const float target = 480;
 const float steeringMod = 0.03;
 const float botSpeed = 10;
 
+//Command request struct for behaviours to request motor control
 typedef struct {
 	float lSpeed;
 	float rSpeed;
@@ -25,7 +26,7 @@ typedef struct {
 cmdRequest followCmd;
 cmdRequest forageCmd;
 
-task arbiter(){
+task arbiter(){ //Behaviour arbitration
 	
 	
 	while(true){
