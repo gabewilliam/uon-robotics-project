@@ -14,14 +14,15 @@ float errP, errI, errD, errPrev;
 float setPt = 480;
 
 //PID Coefficients
-const float kP = 0.006;
-const float kI = 0.001;
-const float kD = 0.001;
+const float kP = 0.020;
+const float kI = 0.012;
+const float kD = 0.017;
 
-const float baseSpeed = 10;
+const float baseSpeed = 13;
 float leftSpeed = 0;
 float rightSpeed = 0;
 float spiralFactor = 0.5;
+float timeSinceLostLine = 0;
 
 float dt = 0;
 const float sampleLength = 100;
@@ -36,94 +37,98 @@ typedef struct {
 cmdRequest followCmd;
 cmdRequest forageCmd;
 
+void wipeError(){
+	errP = 0;
+	errI = 0;
+	errD = 0;
+}
+
 task arbiter(){ //Behaviour arbitration
 	while(true){
 		if(followCmd.priority > forageCmd.priority){
 			leftSpeed = followCmd.lSpeed;
 			rightSpeed = followCmd.rSpeed;
+			displayTextLine(1, "following");
 		}
 		else if(followCmd.priority < forageCmd.priority){
 			leftSpeed = forageCmd.lSpeed;
 			rightSpeed = forageCmd.rSpeed;
+			displayTextLine(1, "foraging");
 		}
 	}
 }
 
 task forage(){
 	while(true){
+		sleep(100);
 		if(!foundLine){
-		
+
 			forageCmd.priority = 3;
-			forageCmd.rSpeed = 40;
-			
-			sleep(300);
-			
-			if (leftSpeed<40){
+			forageCmd.rSpeed = 30;
+
+			if (leftSpeed<30){
 				forageCmd.lSpeed = leftSpeed + spiralFactor;
 			}
 
 			HTCS2readRawRGB(S3, true, r,g,b);
 			avg = (r+g+b)/3;
 
-			if (avg <=  setPt){
+			if (avg <=  (setPt + 20)){
 				foundLine = true;
 				wipeError();
+				forageCmd.lSpeed = 0;
+				forageCmd.rSpeed = 0;
 			}
 		}
 		else{
-			
+
 			forageCmd.lSpeed = 0;
 			forageCmd.rSpeed = 0;
 			forageCmd.priority = 1;
-			
-			if(avg >= 2000){
-				foundLine = false;
+
+			if(avg >= 1400){
+				sleep(1000);
+				if(avg >= 1400){
+					foundLine = false;
+				}
 			}
-			
-			sleep(250);
-			
+
 		}
 	}
 }
 
 task follow() {
 	while(true){
-		
+
 		followCmd.priority = 2;
-		
-		while (foundLine){
+
+//		while (foundLine){
 
 			HTCS2readRawRGB(S3, true, r,g,b);
 			avg = (r + g + b)/3;
-			
+
 			errP = setPt - avg;
 
 			followCmd.rSpeed = baseSpeed + ( (kP * errP) + (kI * errI) + (kD * errD) );
 			followCmd.lSpeed = baseSpeed - ( (kP * errP) + (kI * errI) + (kD * errD) );
-			
-		}
-		sleep(250);
+
+//		}
+//		sleep(250);
 	}
 }
 
 task tPropagator(){
 
-	dt = time(T2);
+	dt = time1(T2);
 	clearTimer(T2);
-	
+
 	errD = (errP - errPrev) / dt;
 	errI += dt * errPrev;
-	
+
 	errPrev = errP;
-	
-	sleep(sampleLength)
 
-}
+	sleep(sampleLength);
 
-void wipeError(){
-	errP = 0;
-	errI = 0;
-	errD = 0;
 }
 
 task main(){
