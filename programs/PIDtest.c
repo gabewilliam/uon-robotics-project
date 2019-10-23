@@ -10,6 +10,8 @@
 bool foundLine = false;
 long r,g,b,avg;
 
+long lightThreshold = 2000;
+
 float errP, errI, errD, errPrev;
 float setPt = 480;
 
@@ -27,11 +29,17 @@ float timeSinceLostLine = 0;
 float dt = 0;
 const float sampleLength = 100;
 
+/* Timers 
+	T1: Object avoidance 
+	T2: PID rrror monitor
+	T3: Track time since lost line
+*/
+
 //Command request struct for behaviours to request motor control
 typedef struct {
 	float lSpeed;
 	float rSpeed;
-	int priority;
+	bool broadcasting=false;
 } cmdRequest;
 
 cmdRequest followCmd;
@@ -45,75 +53,59 @@ void wipeError(){
 
 task arbiter(){ //Behaviour arbitration
 	while(true){
-		if(followCmd.priority > forageCmd.priority){
-			leftSpeed = followCmd.lSpeed;
-			rightSpeed = followCmd.rSpeed;
-			displayTextLine(1, "following");
-		}
-		else if(followCmd.priority < forageCmd.priority){
+		
+		if(forageCmd.broadcasting){
 			leftSpeed = forageCmd.lSpeed;
 			rightSpeed = forageCmd.rSpeed;
-			displayTextLine(1, "foraging");
 		}
+		if(followCmd.broadcasting) { //Line following subsumes forage
+			leftSpeed = followCmd.lSpeed;
+			rightSpeed = followCmd.rSpeed;
+		}
+		
 	}
 }
 
 task forage(){
 	while(true){
+		
 		sleep(100);
-		if(!foundLine){
 
-			forageCmd.priority = 3;
-			forageCmd.rSpeed = 30;
+		forageCmd.broadcasting = true;
+		forageCmd.rSpeed = 30;
 
-			if (leftSpeed<30){
-				forageCmd.lSpeed = leftSpeed + spiralFactor;
-			}
-
-			HTCS2readRawRGB(S3, true, r,g,b);
-			avg = (r+g+b)/3;
-
-			if (avg <=  (setPt + 20)){
-				foundLine = true;
-				wipeError();
-				forageCmd.lSpeed = 0;
-				forageCmd.rSpeed = 0;
-			}
+		if (leftSpeed<30){
+			forageCmd.lSpeed = leftSpeed + spiralFactor;
 		}
-		else{
-
-			forageCmd.lSpeed = 0;
-			forageCmd.rSpeed = 0;
-			forageCmd.priority = 1;
-
-			if(avg >= 1400){
-				sleep(1000);
-				if(avg >= 1400){
-					foundLine = false;
-				}
-			}
-
-		}
+		
 	}
 }
 
 task follow() {
 	while(true){
+			
+		HTCS2readRawRGB(S3, true, r,g,b);
+		avg = (r + g + b)/3;
 
-		followCmd.priority = 2;
+		errP = setPt - avg;
 
-//		while (foundLine){
-
-			HTCS2readRawRGB(S3, true, r,g,b);
-			avg = (r + g + b)/3;
-
-			errP = setPt - avg;
-
-			followCmd.rSpeed = baseSpeed + ( (kP * errP) + (kI * errI) + (kD * errD) );
-			followCmd.lSpeed = baseSpeed - ( (kP * errP) + (kI * errI) + (kD * errD) );
-
-//		}
-//		sleep(250);
+		followCmd.rSpeed = baseSpeed + ( (kP * errP) + (kI * errI) + (kD * errD) );
+		followCmd.lSpeed = baseSpeed - ( (kP * errP) + (kI * errI) + (kD * errD) );
+		
+		if(avg >= lightThreshold && foundLine){
+			//Start timer
+			foundLine = false;
+			clearTimer(T3);
+		}
+		
+		if(foundLine = false && time1(T3) >= 3000){
+			followCmd.broadcasting = false;
+		}
+		
+		if(avg <= setPt && !foundLine){
+			followCmd.broadcasting = true;
+			foundLine = true;
+		}
 	}
 }
 
@@ -132,6 +124,7 @@ task tPropagator(){
 }
 
 task main(){
+	
 	startTask(tPropagator);
 	startTask(arbiter);
 	startTask(forage);
