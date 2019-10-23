@@ -54,21 +54,28 @@ void wipeError(){
 	errD = 0;
 }
 
+void tryCmd(cmdRequest cmd){
+	if(cmd.broadcasting){
+		leftSpeed = cmd.lSpeed;
+		rightSpeed = cmd.rSpeed;
+	}
+}
+
+long turnFixed(cmdRequest cmd, long angle, int dir){ //Turn by a fixed amount
+	resetGyro(gyro); 
+	repeatUntil(getgyroDegrees(gyro) >= angle){
+		cmd.lSpeed = 20 * dir;
+		cmd.rSpeed = -20 * dir;
+	}
+	return getgyroDegrees();
+}
+
 task arbiter(){ //Behaviour arbitration
 	while(true){
-		
-		if(forageCmd.broadcasting){
-			leftSpeed = forageCmd.lSpeed;
-			rightSpeed = forageCmd.rSpeed;
-		}
-		if(followCmd.broadcasting){ //Line following subsumes forage
-			leftSpeed = followCmd.lSpeed;
-			rightSpeed = followCmd.rSpeed;
-		}
-		if(avoidCmd.broadcasting){
-		}
-		if(observeCmd.broadcasting){
-		}
+		tryCmd(forageCmd); 
+		tryCmd(followCmd); 
+		tryCmd(avoidCmd);  
+		tryCmd(observeCmd);
 	}
 }
 
