@@ -14,6 +14,7 @@ long lightThreshold = 2000;
 
 float errP, errI, errD, errPrev;
 float setPt = 480;
+float setPtTolerance = 40;
 
 //PID Coefficients
 const float kP = 0.020;
@@ -44,6 +45,8 @@ typedef struct {
 
 cmdRequest followCmd;
 cmdRequest forageCmd;
+cmdRequest avoidCmd;
+cmdRequest observeCmd;
 
 void wipeError(){
 	errP = 0;
@@ -58,11 +61,14 @@ task arbiter(){ //Behaviour arbitration
 			leftSpeed = forageCmd.lSpeed;
 			rightSpeed = forageCmd.rSpeed;
 		}
-		if(followCmd.broadcasting) { //Line following subsumes forage
+		if(followCmd.broadcasting){ //Line following subsumes forage
 			leftSpeed = followCmd.lSpeed;
 			rightSpeed = followCmd.rSpeed;
 		}
-		
+		if(avoidCmd.broadcasting){
+		}
+		if(observeCmd.broadcasting){
+		}
 	}
 }
 
@@ -74,7 +80,7 @@ task forage(){
 		forageCmd.broadcasting = true;
 		forageCmd.rSpeed = 30;
 
-		if (leftSpeed<30){
+		if (leftSpeed < 30){
 			forageCmd.lSpeed = leftSpeed + spiralFactor;
 		}
 		
@@ -99,12 +105,19 @@ task follow() {
 		}
 		
 		if(foundLine = false && time1(T3) >= 3000){
+			followCmd.lSpeed = 0;
+			followCmd.rSpeed = 0;
+			sleep(100);
 			followCmd.broadcasting = false;
 		}
 		
-		if(avg <= setPt && !foundLine){
+		if((avg <= ( setPt + setPtTolerance)) && (!foundLine)){
 			followCmd.broadcasting = true;
+			followCmd.lSpeed = 0;
+			followCmd.rSpeed = 0;
+			sleep(100);
 			foundLine = true;
+			wipeError();
 		}
 	}
 }
