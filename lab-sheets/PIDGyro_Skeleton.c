@@ -20,6 +20,8 @@ int currentAngle;
 task PIDController(){
 		while(true){
 	sleep(dt);
+		currentAngle = getGyroDegrees(gyro);
+		error = angleTarget-currentAngle;
 	  //currentAngle = .... (update current angle from Gyro)
 		//error = ?;
 		proportional = kp*error;
@@ -27,7 +29,9 @@ task PIDController(){
 
 	}
 }
-
+//answer for step 1 :-
+//dt is the change in time and is used to sleep the PID controller whilst it is looping
+//the error is the current difference in the current angle and the desired angle
 void init(){
 	output = 0;
 	resetGyro(gyro);
