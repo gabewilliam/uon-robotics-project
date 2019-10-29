@@ -10,25 +10,25 @@
 bool foundLine = false;
 long r,g,b,avg,avgCapped;
 
-long lightThreshold = 2000;
+long lightThreshold = 1800;
 
 float errP, errI, errD, errPrev;
-float setPt = 460;
+float setPt = 450;
 float setPtTolerance = 40;
 
 //PID Coefficients
-const float kP = 0.024;
-const float kI = 0.014;
-const float kD = 0.018;
+const float kP = 0.04;
+const float kI = 0.018;
+const float kD = 0.07;
 
-const float baseSpeed = 12;
+const float baseSpeed = 10;
 float leftSpeed = 0;
 float rightSpeed = 0;
 float spiralFactor = 0.5;
 float timeSinceLostLine = 0;
 
 float dt = 0;
-const float sampleLength = 100;
+const float sampleLength = 50;
 
 /* Timers
 	T1: Object avoidance
@@ -41,6 +41,7 @@ typedef struct {
 	float lSpeed;
 	float rSpeed;
 	bool broadcasting;
+	string name;
 } cmdRequest;
 
 cmdRequest followCmd;
@@ -74,7 +75,7 @@ task arbiter(){ //Behaviour arbitration
 	while(true){
 		tryCmd(forageCmd);
 		tryCmd(followCmd);
-		//tryCmd(avoidCmd);
+		tryCmd(avoidCmd);
 		//tryCmd(observeCmd);
 		setMotorSpeed(leftMotor, leftSpeed);
 		setMotorSpeed(rightMotor, rightSpeed);
@@ -82,6 +83,7 @@ task arbiter(){ //Behaviour arbitration
 }
 
 task forage(){
+	forageCmd.name = "Forage";
 	while(true){
 
 		sleep(100);
@@ -97,6 +99,7 @@ task forage(){
 }
 
 task follow() {
+	followCmd.name = "Follow";
 	while(true){
 
 		HTCS2readRawRGB(S3, true, r,g,b);
@@ -109,7 +112,7 @@ task follow() {
 		//	avgCapped = avg;
 		//}
 
-		errP = setPt - avgCapped;
+		errP = setPt - avg;
 
 		followCmd.rSpeed = baseSpeed + ( (kP * errP) + (kI * errI) + (kD * errD) );
 		followCmd.lSpeed = baseSpeed - ( (kP * errP) + (kI * errI) + (kD * errD) );
@@ -127,27 +130,33 @@ task follow() {
 			followCmd.broadcasting = false;
 		}
 
-		if((avg <= ( setPt + setPtTolerance)) && (!foundLine) && !followCmd.broadcasting){
+		if((avg <= ( setPt + setPtTolerance)) && (!foundLine)){
 			followCmd.broadcasting = true;
-			sleep(100);
 			foundLine = true;
 			wipeError();
 		}
 	}
 }
 
-//task avoid(){
+task avoid(){
+	while (true){
 
-//	bool avoiding = false;
-//	avoidCmd.broadcasting = false;
-//	long time = 0;
+		if ((getUSDistance(leftSonar) < 10) || (getUSDistance(rightSonar) < 10) ){
 
-//	while (true){
-//	}
-//}
+      avoidCmd.broadcasting = true;
+      avoidCmd.lSpeed = 0;
+      avoidCmd.rSpeed = 0;
 
+    }	else {
 
-task tPropagator(){
+    	avoidCmd.broadcasting = false;
+
+    }
+
+	}
+}
+
+task calculateErrors(){
 
 	dt = time1(T2);
 	clearTimer(T2);
@@ -161,16 +170,43 @@ task tPropagator(){
 
 }
 
+void display(){
+		string foll,fora,avo;
+		if(followCmd.broadcasting){
+			foll = "True";
+		}
+		else{
+			foll = "False";
+		}
+		if(forageCmd.broadcasting){
+			fora = "True";
+		}
+		else{
+			fora = "False";
+		}
+		if(avoidCmd.broadcasting){
+			avo = "True";
+		}
+		else{
+			avo = "False";
+		}
+		displayTextLine(0, "Forage: %s, %f, %f", fora, forageCmd.lSpeed, forageCmd.rSpeed);
+		displayTextLine(2, "Follow: %s, %f, %f", foll, followCmd.lSpeed, followCmd.rSpeed);
+		displayTextLine(4, "Avoid: %s, %f, %f", avo, avoidCmd.lSpeed, avoidCmd.rSpeed);
+		displayTextLine(6, "Average Colour: %i", avg);
+}
+
 task main(){
 
-	startTask(tPropagator);
+	startTask(calculateErrors);
+
 	startTask(arbiter);
 	startTask(forage);
 	startTask(follow);
-	//startTask(avoid);
+	startTask(avoid);
 
 	while (true){
-
+		display();
 		//setMotorSpeed(leftMotor, leftSpeed);
 		//setMotorSpeed(rightMotor, rightSpeed);
 
