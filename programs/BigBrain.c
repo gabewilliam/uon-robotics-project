@@ -10,16 +10,20 @@
 bool foundLine = false;
 long r,g,b,avg,avgCapped;
 
-long lightThreshold = 1800;
+long lightThreshold = 1100;
 
 float errP, errI, errD, errPrev;
-float setPt = 450;
-float setPtTolerance = 40;
+float setPt = 500;
+float setPtTolerance = 50;
+
+float rWt = 0.3;
+float gWt = 0.59;
+float bWt = 0.11;
 
 //PID Coefficients
-const float kP = 0.04;
-const float kI = 0.018;
-const float kD = 0.07;
+const float kP = 0.03;
+const float kI = 0.000002;
+const float kD = 0.01;
 
 const float baseSpeed = 10;
 float leftSpeed = 0;
@@ -99,23 +103,31 @@ task forage(){
 }
 
 task follow() {
+
 	followCmd.name = "Follow";
+	clearTimer(T2);
 	while(true){
 
-		HTCS2readRawRGB(S3, true, r,g,b);
-		avg = (r + g + b)/3;
+		//HTCS2readRawRGB(S3, true, r,g,b);
+		//avg = (0.3*r + 0.59*g + 0.11*b)/3;
 
-		//if(avg >= 800){
-		//	avgCapped=800;
-		//}
-		//else{
-		//	avgCapped = avg;
-		//}
+		HTCS2readRawWhite(S3, true, avg);
 
+		dt = time1(T2);
+		clearTimer(T2);
+
+		errD = (avg - errPrev) / dt;
+		errI += dt * errPrev;
 		errP = setPt - avg;
+
+		errPrev = avg;
 
 		followCmd.rSpeed = baseSpeed + ( (kP * errP) + (kI * errI) + (kD * errD) );
 		followCmd.lSpeed = baseSpeed - ( (kP * errP) + (kI * errI) + (kD * errD) );
+
+		if(kI * errI >= 20){
+			errI = 0;
+		}
 
 		if(avg >= lightThreshold && foundLine){
 			//Start timer
@@ -135,6 +147,8 @@ task follow() {
 			foundLine = true;
 			wipeError();
 		}
+
+		sleep(sampleLength);
 	}
 }
 
@@ -171,34 +185,34 @@ task calculateErrors(){
 }
 
 void display(){
-		string foll,fora,avo;
-		if(followCmd.broadcasting){
-			foll = "True";
-		}
-		else{
-			foll = "False";
-		}
-		if(forageCmd.broadcasting){
-			fora = "True";
-		}
-		else{
-			fora = "False";
-		}
-		if(avoidCmd.broadcasting){
-			avo = "True";
-		}
-		else{
-			avo = "False";
-		}
-		displayTextLine(0, "Forage: %s, %f, %f", fora, forageCmd.lSpeed, forageCmd.rSpeed);
-		displayTextLine(2, "Follow: %s, %f, %f", foll, followCmd.lSpeed, followCmd.rSpeed);
-		displayTextLine(4, "Avoid: %s, %f, %f", avo, avoidCmd.lSpeed, avoidCmd.rSpeed);
-		displayTextLine(6, "Average Colour: %i", avg);
+		//string foll,fora,avo;
+		//if(followCmd.broadcasting){
+		//	foll = "True";
+		//}
+		//else{
+		//	foll = "False";
+		//}
+		//if(forageCmd.broadcasting){
+		//	fora = "True";
+		//}
+		//else{
+		//	fora = "False";
+		//}
+		//if(avoidCmd.broadcasting){
+		//	avo = "True";
+		//}
+		//else{
+		//	avo = "False";
+		//}
+		//displayTextLine(0, "Forage: %s, %f, %f", fora, forageCmd.lSpeed, forageCmd.rSpeed);
+		//displayTextLine(2, "Follow: %s, %f, %f", foll, followCmd.lSpeed, followCmd.rSpeed);
+		//displayTextLine(4, "Avoid: %s, %f, %f", avo, avoidCmd.lSpeed, avoidCmd.rSpeed);
+		//displayTextLine(6, "Average Colour: %i", avg);
 }
 
 task main(){
 
-	startTask(calculateErrors);
+	//startTask(calculateErrors);
 
 	startTask(arbiter);
 	startTask(forage);
@@ -206,13 +220,15 @@ task main(){
 	startTask(avoid);
 
 	while (true){
-		display();
-		//setMotorSpeed(leftMotor, leftSpeed);
-		//setMotorSpeed(rightMotor, rightSpeed);
 
-		bool datalogOK = datalogOpen(0,1, true);
+		display();
+
+		bool datalogOK = datalogOpen(0,4, true);
 		if(datalogOK){
 			datalogAddLong(0,avg);
+			datalogAddFloat(1, leftSpeed);
+			datalogAddFloat(2, rightSpeed);
+			//datalogAddFloat(3, (leftSpeed + rightSpeed) / (leftSpeed * rightSpeed));
 		}
 		datalogClose();
 
