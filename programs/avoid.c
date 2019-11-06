@@ -27,14 +27,32 @@ task avoid(){
 		if (getUSDistance(leftSonar) < 5){
 			lSpeed = botSpeed;
 			rSpeed = -botSpeed;
-			avoidLeft = true;
 		} else if (getUSDistance(rightSonar) < 5){
 			lSpeed = -botSpeed;
 			rSpeed = botSpeed;
-			avoidRight = true;
 		}
 			
-		
+		if (avoidRight && getUSDistance(rightSonar) > 15){
+			clearTimer(T1);
+			repeatUntil(Time1(T1){
+				lSpeed = botSpeed;
+				rSpeed = botSpeed;
+			}
+				    
+			lSpeed = 0;
+			rSpeed = 0;
+		}
+				
+		if (avoidLeft && getUSDistance(leftSonar) > 15){
+			clearTimer(T1);
+			repeatUntil(Time1(T1){
+				lSpeed = botSpeed;
+				rSpeed = botSpeed;
+			}
+				    
+			lSpeed = 0;
+			rSpeed = 0;
+		}
 	}
 }
 
