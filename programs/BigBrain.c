@@ -8,27 +8,24 @@
 #include "HitechnicColorSensor.h"
 
 bool foundLine = false;
-long r,g,b,avg,avgCapped;
+long avg;
+long maxLight, minLight;
 
 long lightThreshold = 1100;
 
-float errP, errI, errD, errPrev;
-float setPt = 500;
+float errP, errI, errD, errPrev, maxCap, minCap;
+long setPt = 500;
 float setPtTolerance = 50;
 
-float rWt = 0.3;
-float gWt = 0.59;
-float bWt = 0.11;
-
 //PID Coefficients
-const float kP = 0.03;
+const float kP = 1.4;
 const float kI = 0.000002;
-const float kD = 0.01;
+const float kD = 0.5;
 
-const float baseSpeed = 10;
+const float baseSpeed = 9;
 float leftSpeed = 0;
 float rightSpeed = 0;
-float spiralFactor = 0.5;
+float spiralFactor = 0.33;
 float timeSinceLostLine = 0;
 
 float dt = 0;
@@ -121,9 +118,14 @@ task follow() {
 		errP = setPt - avg;
 
 		errPrev = avg;
-
-		followCmd.rSpeed = baseSpeed + ( (kP * errP) + (kI * errI) + (kD * errD) );
-		followCmd.lSpeed = baseSpeed - ( (kP * errP) + (kI * errI) + (kD * errD) );
+		if(errP < 0){
+			followCmd.rSpeed = baseSpeed + maxCap * ( (kP * errP) + (kI * errI) + (kD * errD) );
+			followCmd.lSpeed = baseSpeed - maxCap * ( (kP * errP) + (kI * errI) + (kD * errD) );
+		}
+		else if (errP >= 0){
+			followCmd.rSpeed = baseSpeed + minCap * ( (kP * errP) + (kI * errI) + (kD * errD) );
+			followCmd.lSpeed = baseSpeed - minCap * ( (kP * errP) + (kI * errI) + (kD * errD) );
+		}
 
 		if(kI * errI >= 20){
 			errI = 0;
@@ -155,17 +157,32 @@ task follow() {
 task avoid(){
 	while (true){
 
-		if ((getUSDistance(leftSonar) < 10) || (getUSDistance(rightSonar) < 10) ){
+		//if ((getUSDistance(leftSonar) < 10) || (getUSDistance(rightSonar) < 10) ){
 
-      avoidCmd.broadcasting = true;
-      avoidCmd.lSpeed = 0;
-      avoidCmd.rSpeed = 0;
+  //    avoidCmd.broadcasting = true;
+  //    //avoidCmd.lSpeed = 0;
+  //   // avoidCmd.rSpeed = 0;
 
-    }	else {
+  //  }	//else {
 
-    	avoidCmd.broadcasting = false;
+  //  //	avoidCmd.broadcasting = false;
+  //  //}
 
-    }
+  //  while (avoidCmd.broadcasting){
+
+  //	  if ((getUSDistance(leftSonar) < 10) || (getUSDistance(rightSonar) < 10) ){
+  //  			avoidCmd.lSpeed =	botSpeed +(30 - getUSDistance(leftSonar));
+		//			avoidCmd.rSpeed = botSpeed - (15- getUSDistance(leftSonar));
+
+ 	// 		}else {
+ 	// 		clearTimer(T1);
+ 	// 			repeatUntil(time1(T1) >= 2000){
+ 	// 				avoidCmd.lSpeed = botSpeed;
+ 	// 				avoidCmd.rSpeed = botSpeed;
+ 	// 			}
+
+ 	// 		}
+
 
 	}
 }
@@ -213,6 +230,41 @@ void display(){
 task main(){
 
 	//startTask(calculateErrors);
+	while(getButtonPress(buttonEnter)==0){
+		displayTextLine(0, "Press for white");
+	}
+
+	HTCS2readRawWhite(S3, true, maxLight);
+	sleep(500);
+
+	while(getButtonPress(buttonEnter)==0){
+		displayTextLine(0, "White: %f", maxLight);
+		displayTextLine(2, "Press for Black");
+	}
+
+	HTCS2readRawWhite(S3, true, minLight);
+	displayTextLine(2, "Black: %f", minLight);
+	sleep(500);
+
+	while(getButtonPress(buttonEnter)==0){
+		displayTextLine(4, "Press for set point");
+	}
+
+	HTCS2readRawWhite(S3, true, setPt);
+	displayTextLine(4, "Set pt: %f", setPt);
+	sleep(500);
+
+	lightThreshold = maxLight;
+	//setPt = (black + white)/2;
+
+	maxCap = baseSpeed/maxLight;
+	minCap = baseSpeed/minLight;
+
+	while(getButtonPress(buttonEnter)==0){
+		displayTextLine(6, "Press to Start Robot");
+	}
+
+	sleep(200);
 
 	startTask(arbiter);
 	startTask(forage);
@@ -223,14 +275,14 @@ task main(){
 
 		display();
 
-		bool datalogOK = datalogOpen(0,4, true);
-		if(datalogOK){
-			datalogAddLong(0,avg);
-			datalogAddFloat(1, leftSpeed);
-			datalogAddFloat(2, rightSpeed);
+	//	bool datalogOK = datalogOpen(0,4, true);
+	//	if(datalogOK){
+	//		datalogAddLong(0,avg);
+	//		datalogAddFloat(1, leftSpeed);
+	//		datalogAddFloat(2, rightSpeed);
 			//datalogAddFloat(3, (leftSpeed + rightSpeed) / (leftSpeed * rightSpeed));
-		}
-		datalogClose();
+//		}
+//		datalogClose();
 
 	}
 }
