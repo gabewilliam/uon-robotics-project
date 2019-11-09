@@ -28,6 +28,10 @@ while (true){
     lSpeed = 8;
     rSpeed = 12;
   }
+  
+  if (FoundLine Code && avoidBool){
+    avoidBool = false;
+  }
     
 }
 }
