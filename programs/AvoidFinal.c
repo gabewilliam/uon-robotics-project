@@ -10,7 +10,7 @@ while (true){
     bool backUp = true;
   }
 
-  //reverse
+  //reverse until 20 cm away 
   if(backUp && (getUSDistance(leftSonar) < 20 || getUSDistance(rightSonar) < 20)){
     lSpeed = -botSpeed;
     rSpeed = -botSpeed;
@@ -22,13 +22,14 @@ while (true){
     rSpeed = -botSpeed;
   }
   
-  //spiral around
+  //spiral around after the first spiral we no longer reverse to backUP becomes false
   if(avoidBool && (getUSDistance(leftSonar) > 20 || getUSDistance(rightSonar) > 20)){
     backUP = false;
     lSpeed = 8;
     rSpeed = 12;
   }
   
+  //stop avoiding if we find the line
   if (FoundLine Code && avoidBool){
     avoidBool = false;
   }
