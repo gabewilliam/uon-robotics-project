@@ -13,10 +13,10 @@ long rSpeed = 10;
 
 bool avoidBool = false;
 //bool backUp = false;
-int turnCount = 0;
-int i =0;
-task avoid(){
 
+task avoid(){
+int i;
+int turnCount = 0;
 while (true){
 
 	long leftDist = getUSDistance(leftSonar);
@@ -28,7 +28,6 @@ while (true){
   }
 
   if (leftDist < 10 || rightDist < 10){
-  	avoidBool = true;
 		repeatUntil(leftDist >= 20 && rightDist >=20){
 			leftDist = getUSDistance(leftSonar);
 			rightDist = getUSDistance(rightSonar);
@@ -38,7 +37,7 @@ while (true){
 	}
 
 	//Turn away from obstacle
-  if (avoidBool && (leftDist <= 20 || rightDist <= 20)){
+  if (avoidBool && leftDist <= 20){
  		repeatUntil(leftDist >= 20){
   		clearTimer(T1);
   		repeatUntil(time1(T1) >= 500){
@@ -49,20 +48,21 @@ while (true){
   		}
   		turnCount += 1;
   	}
+  	i = 0;
 	}
 
-	if (avoidBool && leftDist > 20 && i <= 2000){
+	if (avoidBool && leftDist > 20 && i <= 1500){
   			lSpeed = botSpeed;
 				rSpeed = botSpeed;
 				i+=1;
 	}
 	//Try turning back round
-	if (i >= 2000){
+	if (i >= 1000){
 		lSpeed = 0;
 		rSpeed = 0;
 		i=0;
 		clearTimer(T1);
-		repeatUntil(time1(T1) >= turnCount * 1000){
+		repeatUntil(time1(T1) >= turnCount * 800){
   			lSpeed = -botSpeed;
 				rSpeed = botSpeed;
   	}
@@ -71,9 +71,10 @@ while (true){
   	rSpeed=botSpeed;
 	}
 
-//	if (meet line){
-		//avoidBool = false;
-	//}
+	if (!avoidBool){
+		lSpeed = botSpeed;
+		rSpeed = botSpeed;
+	}
 
 	}
 }
@@ -87,13 +88,11 @@ task main(){
 		long Rdist = getUSDistance(rightSonar);
 		displayTextLine(0,"Object Left: %f",Ldist);
 		displayTextLine(1,"Object Right: %f",Rdist);
-
 		if (avoidBool){
 			displayTextLine(2,"Avoid: true");
 		} else {
 			displayTextLine(2,"Avoid: false");
 		}
-		displayTextLine(3,"turn count: %f",turnCount);
 
 		setMotorSpeed(leftMotor, lSpeed);
 		setMotorSpeed(rightMotor, rSpeed);
