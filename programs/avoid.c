@@ -23,39 +23,67 @@ while (true){
 	long rightDist = getUSDistance(rightSonar);
 
   //detect object and start to reverse
-  if (leftDist < 20 || rightDist < 20 ){
+  if (leftDist < 15){
     avoidBool = true;
+    lSpeed = 0;
+    rSpeed = 0;
+    sleep(1000);
   }
 
-  if (leftDist < 10 || rightDist < 10){
-  	avoidBool = true;
-		repeatUntil(leftDist >= 20 && rightDist >=20){
-			leftDist = getUSDistance(leftSonar);
-			rightDist = getUSDistance(rightSonar);
-			lSpeed = -botSpeed;
-			rSpeed = -botSpeed;
-		}
-	}
-
-	//Turn away from obstacle
-  if (avoidBool && (leftDist <= 20 || rightDist <= 20)){
- 		repeatUntil(leftDist >= 20){
-  		clearTimer(T1);
-  		repeatUntil(time1(T1) >= 500){
+  if (avoidBool){
+  	clearTimer(T2);
+  	repeatUntil(leftDist >= 25){
   			leftDist = getUSDistance(leftSonar);
 				rightDist = getUSDistance(rightSonar);
   			lSpeed = botSpeed;
 				rSpeed = -botSpeed;
   		}
-  		turnCount += 1;
-  	}
-	}
+  		long time = time1(T2)*1.7;
 
-	if (avoidBool && leftDist > 20 && i <= 2000){
+  	clearTimer(T1);
+		repeatUntil(time1(T1) >= 8000){
   			lSpeed = botSpeed;
 				rSpeed = botSpeed;
-				i+=1;
+		}
+		clearTimer(T2);
+		repeatUntil(time1(T2) >= time){
+  			lSpeed = -botSpeed;
+				rSpeed = botSpeed;
+  		}
+  //	repeatUntil(leftDist <= 25){
+  //			lSpeed = botSpeed;
+		//		rSpeed = botSpeed;
+		//}
+
+  		clearTimer(T1);
+		repeatUntil(time1(T1) >= 9000){
+  			lSpeed = botSpeed;
+				rSpeed = botSpeed;
+		}
+
+		avoidBool = false;
+		//lSpeed = 0;
+		//rSpeed = 0;
 	}
+
+	//Turn away from obstacle
+ // if (avoidBool && (leftDist <= 20 || rightDist <= 20)){
+ //		repeatUntil(leftDist >= 20){
+ // 			leftDist = getUSDistance(leftSonar);
+	//			rightDist = getUSDistance(rightSonar);
+ // 			lSpeed = botSpeed;
+	//			rSpeed = -botSpeed;
+ // 		}
+	//}
+
+	//if (avoidBool && leftDist >= 20){
+	//	clearTimer(T1);
+	//	repeatUntil(time1(T1) >= 2000){
+ // 			lSpeed = botSpeed;
+	//			rSpeed = botSpeed;
+	//	}
+	//}
+
 	//Try turning back round
 	if (i >= 2000){
 		lSpeed = 0;
@@ -93,7 +121,6 @@ task main(){
 		} else {
 			displayTextLine(2,"Avoid: false");
 		}
-		displayTextLine(3,"turn count: %f",turnCount);
 
 		setMotorSpeed(leftMotor, lSpeed);
 		setMotorSpeed(rightMotor, rSpeed);

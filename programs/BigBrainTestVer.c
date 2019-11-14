@@ -22,10 +22,10 @@ const float kP = 1.4;
 const float kI = 0.000002;
 const float kD = 0.5;
 
-const float baseSpeed = 9;
+const float baseSpeed =30;
 float leftSpeed = 0;
 float rightSpeed = 0;
-float spiralFactor = 0.33;
+float spiralFactor = 0.2;
 float timeSinceLostLine = 0;
 
 float dt = 0;
@@ -56,21 +56,17 @@ void wipeError(){
 	errD = 0;
 }
 
+void display(cmdRequest cmd){
+
+		displayTextLine(0, cmd.name);
+}
+
 void tryCmd(cmdRequest cmd){
 	if(cmd.broadcasting){
 		leftSpeed = cmd.lSpeed;
 		rightSpeed = cmd.rSpeed;
-		displayTextLine(8, cmd.name);
+		display(cmd);
 	}
-}
-
-long turnFixed(cmdRequest cmd, long angle, int dir){ //Turn by a fixed amount
-	resetGyro(gyro);
-	repeatUntil(getGyroDegrees(gyro) >= angle){
-		cmd.lSpeed = 20 * dir;
-		cmd.rSpeed = -20 * dir;
-	}
-	return getGyroDegrees(gyro);
 }
 
 task arbiter(){ //Behaviour arbitration
@@ -105,9 +101,6 @@ task follow() {
 	followCmd.name = "Follow";
 	clearTimer(T2);
 	while(true){
-
-		//HTCS2readRawRGB(S3, true, r,g,b);
-		//avg = (0.3*r + 0.59*g + 0.11*b)/3;
 
 		HTCS2readRawWhite(S3, true, avg);
 
@@ -156,70 +149,129 @@ task follow() {
 }
 
 task avoid(){
-	int turnCount = 0;
-	avoidCmd.name = "Avoid";
-	int i =0;
 	while (true){
 
-		long leftDist = getUSDistance(leftSonar);
-		long rightDist = getUSDistance(rightSonar);
+	long leftDist = getUSDistance(leftSonar);
+	long rightDist = getUSDistance(rightSonar);
+
+  //detect object and start to reverse
+  if (leftDist < 15){
+    avoidCmd.broadcasting = true;
+    avoidCmd.lSpeed = 0;
+    avoidCmd.rSpeed = 0;
+    sleep(1000);
+  }
+
+  if (avoidCmd.broadcasting){
+  	clearTimer(T2);
+  	repeatUntil(leftDist >= 25){
+  			leftDist = getUSDistance(leftSonar);
+				rightDist = getUSDistance(rightSonar);
+  			avoidCmd.lSpeed = baseSpeed;
+				avoidCmd.rSpeed = -baseSpeed;
+  		}
+  		long time = time1(T2)*1.7;
+
+  	clearTimer(T1);
+		repeatUntil(time1(T1) >= 8000){
+  			avoidCmd.lSpeed = baseSpeed;
+				avoidCmd.rSpeed = baseSpeed;
+		}
+		clearTimer(T2);
+		repeatUntil(time1(T2) >= time){
+  			avoidCmd.lSpeed = -baseSpeed;
+				avoidCmd.rSpeed = baseSpeed;
+  		}
+  //	repeatUntil(leftDist <= 25){
+  //			lSpeed = botSpeed;
+		//		rSpeed = botSpeed;
+		//}
+
+  		clearTimer(T1);
+		repeatUntil(time1(T1) >= 9000){
+  			avoidCmd.lSpeed = baseSpeed;
+				avoidCmd.rSpeed = baseSpeed;
+		}
+
+		avoidCmd.broadcasting = false;
+		//lSpeed = 0;
+		//rSpeed = 0;
+	}
+}
+
+	//int turnCount = 0;
+	//avoidCmd.name = "Avoid";
+	//int i =0;
+	//avoidCmd.broadcasting = false;
+	//float leftDist;
+	//float rightDist;
+	//while (true){
+	//	leftDist = getUSDistance(leftSonar);
+	//	rightDist = getUSDistance(rightSonar);
 
 	  //detect object and start to reverse
-	  if (leftDist < 20 || rightDist < 20 ){
-	    avoidCmd.broadcasting = true;
-	  }
+	//  if (leftDist <= 20 || rightDist <= 20 ){
+	//    avoidCmd.broadcasting = true;
+	//    avoidCmd.lSpeed = 0;
+	//    avoidCmd.rSpeed = 0;
+	//  }
 
-	  if (leftDist < 10 || rightDist < 10){
-	  	avoidCmd.broadcasting = true;
-			repeatUntil(leftDist >= 20 && rightDist >=20){
-				leftDist = getUSDistance(leftSonar);
-				rightDist = getUSDistance(rightSonar);
-				avoidCmd.lSpeed = -baseSpeed;
-				avoidCmd.rSpeed = -baseSpeed;
-			}
-		}
+	//  if (avoidCmd.broadcasting && leftDist > 20 && rightDist > 20 ){
+	//  	avoidCmd.broadcasting = false;
+	//}
+
+
+	  //if (leftDist < 10 || rightDist < 10){
+	  //	avoidCmd.broadcasting = true;
+		//	repeatUntil(leftDist >= 20 && rightDist >=20){
+		//		leftDist = getUSDistance(leftSonar);
+		//		rightDist = getUSDistance(rightSonar);
+		//		avoidCmd.lSpeed = -baseSpeed;
+		//		avoidCmd.rSpeed = -baseSpeed;
+		//	}
+	///	}
 
 		//Turn away from obstacle
-	  if (avoidCmd.broadcasting && (leftDist <= 20 || rightDist <= 20)){
-	 		repeatUntil(leftDist >= 20){
-	  		clearTimer(T1);
-	  		repeatUntil(time1(T1) >= 500){
-	  			leftDist = getUSDistance(leftSonar);
-					rightDist = getUSDistance(rightSonar);
-	  			avoidCmd.lSpeed = baseSpeed;
-					avoidCmd.rSpeed = -baseSpeed;
-	  		}
-	  		turnCount += 1;
-	  	}
-		}
+	 // if (avoidCmd.broadcasting && (leftDist <= 20 || rightDist <= 20)){
+	 	//	repeatUntil(leftDist >= 20){
+	  //		clearTimer(T1);
+	  //		repeatUntil(time1(T1) >= 500){
+	  //			leftDist = getUSDistance(leftSonar);
+		//			rightDist = getUSDistance(rightSonar);
+	  //			avoidCmd.lSpeed = baseSpeed;
+		//			avoidCmd.rSpeed = -baseSpeed;
+	  //		}
+	  //		turnCount += 1;
+	 // 	}
+	//	}
 
-		if (avoidCmd.broadcasting && leftDist > 20 && i <= 2000){
-	  			avoidCmd.lSpeed = baseSpeed;
-					avoidCmd.rSpeed = baseSpeed;
-					i+=1;
-		}
+	//	if (avoidCmd.broadcasting && leftDist > 20 && i <= 2000){
+	 // 			avoidCmd.lSpeed = baseSpeed;
+	//				avoidCmd.rSpeed = baseSpeed;
+	//				i+=1;
+	//	}
+
 		//Try turning back round
-		if (i >= 2000){
-			avoidCmd.lSpeed = 0;
-			avoidCmd.rSpeed = 0;
-			i=0;
-			clearTimer(T1);
-			repeatUntil(time1(T1) >= turnCount * 1000){
-	  			avoidCmd.lSpeed = -baseSpeed;
-					avoidCmd.rSpeed = baseSpeed;
-	  	}
-	  	turnCount = 0;
-	  	avoidCmd.lSpeed=baseSpeed;
-	  	avoidCmd.rSpeed=baseSpeed;
-		}
+	//	if (i >= 2000){
+		//	avoidCmd.lSpeed = 0;
+		//	avoidCmd.rSpeed = 0;
+	//		i=0;
+		//	clearTimer(T1);
+	//		repeatUntil(time1(T1) >= turnCount * 1000){
+	 // 			avoidCmd.lSpeed = -baseSpeed;
+		//			avoidCmd.rSpeed = baseSpeed;
+	 // 	}
+	 // 	turnCount = 0;
+	 // 	avoidCmd.lSpeed=baseSpeed;
+	 // 	avoidCmd.rSpeed=baseSpeed;
+		//}
 
-		if((avg <= ( setPt + setPtTolerance)) && (!foundLine) && avoidCmd.broadcasting){
-				avoidCmd.broadcasting = false;
-				foundLine = true;
-				wipeError();
-			}
+		//if((avg <= ( setPt + setPtTolerance)) && avoidCmd.broadcasting){
+		//		avoidCmd.broadcasting = false;
+		//		wipeError();
+		//	}
 
-		}
+		//}
 }
 
 task calculateErrors(){
@@ -236,31 +288,7 @@ task calculateErrors(){
 
 }
 
-void display(){
-		//string foll,fora,avo;
-		//if(followCmd.broadcasting){
-		//	foll = "True";
-		//}
-		//else{
-		//	foll = "False";
-		//}
-		//if(forageCmd.broadcasting){
-		//	fora = "True";
-		//}
-		//else{
-		//	fora = "False";
-		//}
-		//if(avoidCmd.broadcasting){
-		//	avo = "True";
-		//}
-		//else{
-		//	avo = "False";
-		//}
-		//displayTextLine(0, "Forage: %s, %f, %f", fora, forageCmd.lSpeed, forageCmd.rSpeed);
-		//displayTextLine(2, "Follow: %s, %f, %f", foll, followCmd.lSpeed, followCmd.rSpeed);
-		//displayTextLine(4, "Avoid: %s, %f, %f", avo, avoidCmd.lSpeed, avoidCmd.rSpeed);
-		//displayTextLine(6, "Average Colour: %i", avg);
-}
+
 
 task main(){
 
@@ -301,23 +329,18 @@ task main(){
 
 	sleep(200);
 
+
 	startTask(arbiter);
+	displayTextLine(7, "arbiter started");
 	startTask(forage);
+	displayTextLine(8, "forage started");
 	startTask(follow);
+	displayTextLine(9, "follow started");
 	startTask(avoid);
+	eraseDisplay();
 
 	while (true){
 
-		display();
-
-	//	bool datalogOK = datalogOpen(0,4, true);
-	//	if(datalogOK){
-	//		datalogAddLong(0,avg);
-	//		datalogAddFloat(1, leftSpeed);
-	//		datalogAddFloat(2, rightSpeed);
-			//datalogAddFloat(3, (leftSpeed + rightSpeed) / (leftSpeed * rightSpeed));
-//		}
-//		datalogClose();
 
 	}
 }
