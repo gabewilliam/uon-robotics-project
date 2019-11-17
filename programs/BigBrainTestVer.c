@@ -28,6 +28,8 @@ float rightSpeed = 0;
 float spiralFactor = 0.2;
 float timeSinceLostLine = 0;
 
+bool paused = false;
+
 float dt = 0;
 const float sampleLength = 50;
 
@@ -62,10 +64,21 @@ void display(cmdRequest cmd){
 }
 
 void tryCmd(cmdRequest cmd){
-	if(cmd.broadcasting){
-		leftSpeed = cmd.lSpeed;
-		rightSpeed = cmd.rSpeed;
-		display(cmd);
+	if (!paused){
+		if(cmd.broadcasting){
+			leftSpeed = cmd.lSpeed;
+			rightSpeed = cmd.rSpeed;
+			display(cmd);
+		}
+	} else {
+		leftSpeed = 0;
+		rightSpeed = 0;
+		displayTextLine(0,"Current Light: %f",avg);
+		displayTextLine(1,"Current Behaviour: %s", cmd.name);
+		displayTextLine(2,"Current Left Speed: %f", cmd.lSpeed);
+		displayTextLine(3,"Current Right Speed: %f", cmd.rSpeed);
+		displayTextLine(5,"Current Target: %f", setPt);
+		displayTextLine(6,"Current errP,errI,errD: %f,%f,%f", errP,errI,errD);
 	}
 }
 
@@ -199,79 +212,6 @@ task avoid(){
 	}
 }
 
-	//int turnCount = 0;
-	//avoidCmd.name = "Avoid";
-	//int i =0;
-	//avoidCmd.broadcasting = false;
-	//float leftDist;
-	//float rightDist;
-	//while (true){
-	//	leftDist = getUSDistance(leftSonar);
-	//	rightDist = getUSDistance(rightSonar);
-
-	  //detect object and start to reverse
-	//  if (leftDist <= 20 || rightDist <= 20 ){
-	//    avoidCmd.broadcasting = true;
-	//    avoidCmd.lSpeed = 0;
-	//    avoidCmd.rSpeed = 0;
-	//  }
-
-	//  if (avoidCmd.broadcasting && leftDist > 20 && rightDist > 20 ){
-	//  	avoidCmd.broadcasting = false;
-	//}
-
-
-	  //if (leftDist < 10 || rightDist < 10){
-	  //	avoidCmd.broadcasting = true;
-		//	repeatUntil(leftDist >= 20 && rightDist >=20){
-		//		leftDist = getUSDistance(leftSonar);
-		//		rightDist = getUSDistance(rightSonar);
-		//		avoidCmd.lSpeed = -baseSpeed;
-		//		avoidCmd.rSpeed = -baseSpeed;
-		//	}
-	///	}
-
-		//Turn away from obstacle
-	 // if (avoidCmd.broadcasting && (leftDist <= 20 || rightDist <= 20)){
-	 	//	repeatUntil(leftDist >= 20){
-	  //		clearTimer(T1);
-	  //		repeatUntil(time1(T1) >= 500){
-	  //			leftDist = getUSDistance(leftSonar);
-		//			rightDist = getUSDistance(rightSonar);
-	  //			avoidCmd.lSpeed = baseSpeed;
-		//			avoidCmd.rSpeed = -baseSpeed;
-	  //		}
-	  //		turnCount += 1;
-	 // 	}
-	//	}
-
-	//	if (avoidCmd.broadcasting && leftDist > 20 && i <= 2000){
-	 // 			avoidCmd.lSpeed = baseSpeed;
-	//				avoidCmd.rSpeed = baseSpeed;
-	//				i+=1;
-	//	}
-
-		//Try turning back round
-	//	if (i >= 2000){
-		//	avoidCmd.lSpeed = 0;
-		//	avoidCmd.rSpeed = 0;
-	//		i=0;
-		//	clearTimer(T1);
-	//		repeatUntil(time1(T1) >= turnCount * 1000){
-	 // 			avoidCmd.lSpeed = -baseSpeed;
-		//			avoidCmd.rSpeed = baseSpeed;
-	 // 	}
-	 // 	turnCount = 0;
-	 // 	avoidCmd.lSpeed=baseSpeed;
-	 // 	avoidCmd.rSpeed=baseSpeed;
-		//}
-
-		//if((avg <= ( setPt + setPtTolerance)) && avoidCmd.broadcasting){
-		//		avoidCmd.broadcasting = false;
-		//		wipeError();
-		//	}
-
-		//}
 }
 
 task calculateErrors(){
@@ -288,7 +228,18 @@ task calculateErrors(){
 
 }
 
-
+task pause(){
+	
+	while(true){
+		repeatUntil(getButtonPress(buttonEnter)==0){
+			paused = true;	
+		}
+		
+		repeatUntil(getButtonPress(buttonEnter)==0){
+			paused = false;	
+		}
+	}
+}
 
 task main(){
 
@@ -331,16 +282,14 @@ task main(){
 
 
 	startTask(arbiter);
-	displayTextLine(7, "arbiter started");
 	startTask(forage);
-	displayTextLine(8, "forage started");
 	startTask(follow);
-	displayTextLine(9, "follow started");
 	startTask(avoid);
+	startTask(pause);
 	eraseDisplay();
 
 	while (true){
-
+	
 
 	}
 }
