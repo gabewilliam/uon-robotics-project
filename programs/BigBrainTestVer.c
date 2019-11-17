@@ -215,7 +215,11 @@ task avoid(){ //avoid behaviour
 
 task observe(){ //observe Behaviour
 	while (true){
-		
+		//make sure to follow line.
+		//check wheels havent turned more than a given amount
+		//if they have then stop timer and record time if bigger than last recorded time
+		//reset timer
+		//something something stop when you reach this timer value
 	}
 }
 
