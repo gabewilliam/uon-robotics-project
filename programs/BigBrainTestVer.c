@@ -28,6 +28,7 @@ float rightSpeed = 0;
 float spiralFactor = 0.2;
 float timeSinceLostLine = 0;
 
+//bool for 
 bool paused = false;
 
 float dt = 0;
@@ -35,7 +36,7 @@ const float sampleLength = 50;
 
 /* Timers
 	T1: Object avoidance
-	T2: PID rrror monitor
+	T2: PID error monitor
 	T3: Track time since lost line
 */
 
@@ -87,13 +88,13 @@ task arbiter(){ //Behaviour arbitration
 		tryCmd(forageCmd);
 		tryCmd(followCmd);
 		tryCmd(avoidCmd);
-		//tryCmd(observeCmd);
+		tryCmd(observeCmd);
 		setMotorSpeed(leftMotor, leftSpeed);
 		setMotorSpeed(rightMotor, rightSpeed);
 	}
 }
 
-task forage(){
+task forage(){ //forage behaviour
 	forageCmd.name = "Forage";
 	while(true){
 
@@ -109,7 +110,7 @@ task forage(){
 	}
 }
 
-task follow() {
+task follow() { //follow behaviour
 
 	followCmd.name = "Follow";
 	clearTimer(T2);
@@ -161,7 +162,7 @@ task follow() {
 	}
 }
 
-task avoid(){
+task avoid(){ //avoid behaviour
 	while (true){
 
 	long leftDist = getUSDistance(leftSonar);
@@ -176,42 +177,46 @@ task avoid(){
   }
 
   if (avoidCmd.broadcasting){
-  	clearTimer(T2);
+  	clearTimer(T1);
   	repeatUntil(leftDist >= 25){
-  			leftDist = getUSDistance(leftSonar);
-				rightDist = getUSDistance(rightSonar);
-  			avoidCmd.lSpeed = baseSpeed;
-				avoidCmd.rSpeed = -baseSpeed;
-  		}
-  		long time = time1(T2)*1.7;
+  		leftDist = getUSDistance(leftSonar);
+		rightDist = getUSDistance(rightSonar);
+  		avoidCmd.lSpeed = baseSpeed;
+		avoidCmd.rSpeed = -baseSpeed;
+  	}
+  	long time = time1(T1)*1.7;
 
   	clearTimer(T1);
-		repeatUntil(time1(T1) >= 8000){
-  			avoidCmd.lSpeed = baseSpeed;
-				avoidCmd.rSpeed = baseSpeed;
-		}
-		clearTimer(T2);
-		repeatUntil(time1(T2) >= time){
-  			avoidCmd.lSpeed = -baseSpeed;
-				avoidCmd.rSpeed = baseSpeed;
-  		}
+	repeatUntil(time1(T1) >= 8000){
+  		avoidCmd.lSpeed = baseSpeed;
+		avoidCmd.rSpeed = baseSpeed;
+	}
+	clearTimer(T1);
+	repeatUntil(time1(T1) >= time){
+  		avoidCmd.lSpeed = -baseSpeed;
+		avoidCmd.rSpeed = baseSpeed;
+  	}
   //	repeatUntil(leftDist <= 25){
   //			lSpeed = botSpeed;
 		//		rSpeed = botSpeed;
 		//}
 
-  		clearTimer(T1);
-		repeatUntil(time1(T1) >= 9000){
-  			avoidCmd.lSpeed = baseSpeed;
-				avoidCmd.rSpeed = baseSpeed;
-		}
+  	clearTimer(T1);
+	repeatUntil(time1(T1) >= 9000){
+  		avoidCmd.lSpeed = baseSpeed;
+		avoidCmd.rSpeed = baseSpeed;
+	}
 
-		avoidCmd.broadcasting = false;
-		//lSpeed = 0;
-		//rSpeed = 0;
+	avoidCmd.broadcasting = false;
 	}
 }
 
+}
+
+task observe(){ //observe Behaviour
+	while (true){
+		
+	}
 }
 
 task calculateErrors(){
@@ -286,6 +291,7 @@ task main(){
 	startTask(follow);
 	startTask(avoid);
 	startTask(pause);
+	startTask(observe);
 	eraseDisplay();
 
 	while (true){
