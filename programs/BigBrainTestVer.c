@@ -28,8 +28,12 @@ float rightSpeed = 0;
 float spiralFactor = 0.2;
 float timeSinceLostLine = 0;
 
-//bool for 
+//bool for pause
 bool paused = false;
+
+//for observe
+long longestPath = 0;
+bool newStraight = true;
 
 float dt = 0;
 const float sampleLength = 50;
@@ -80,6 +84,7 @@ void tryCmd(cmdRequest cmd){
 		displayTextLine(3,"Current Right Speed: %f", cmd.rSpeed);
 		displayTextLine(5,"Current Target: %f", setPt);
 		displayTextLine(6,"Current errP,errI,errD: %f,%f,%f", errP,errI,errD);
+		displayTextLine(8,"Current Longest Path: %f",longestPath); 
 	}
 }
 
@@ -210,34 +215,33 @@ task avoid(){ //avoid behaviour
 }
 
 task observe(){ //observe Behaviour
-	long longestPath = 0;
-	bool newPath = true;
-	long prevGyro = 0;
-	long gyroPos = 0;
+
 	while (true){
 		//long leftWheel = leftmotorencoder/Speed;
 		//long rightWheel = rightmotorencoder/Speed;
 		
-		if (foundLine && newPath){
+		if (foundLine && newStraight){
 			clearTimer(T4);	
-			newPath = false;
+			newStraight = false;
+			resetGyro(gyro);
 		}
 		
+		//if you over turn stop the timer and record how long you went straight for
 		if (leftWheel-rightWheel < 7? || rightWheel - leftWheel < 7?){
 			longestPath = time1(T4);
-			newPath = true;
-		}
+			newStraight = true;
+		} //attempt 1
 		
+		if (getGyroDegrees(Gyro) >= 90){
+			longestPath = time1(T4);
+			newStraight = true;
+		} //attempt 2
+		
+		//pause when your own the longest straight
 		if (longestPath != 0 && time1(T4) >= longestPath/2){
 			paused = true;	
 		}
 		
-		
-		//make sure to follow line.
-		//check wheels havent turned more than a given amount
-		//if they have then stop timer and record time if bigger than last recorded time
-		//reset timer
-		//something something stop when you reach this timer value
 	}
 }
 
