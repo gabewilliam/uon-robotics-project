@@ -196,10 +196,6 @@ task avoid(){ //avoid behaviour
   		avoidCmd.lSpeed = -baseSpeed;
 		avoidCmd.rSpeed = baseSpeed;
   	}
-  //	repeatUntil(leftDist <= 25){
-  //			lSpeed = botSpeed;
-		//		rSpeed = botSpeed;
-		//}
 
   	clearTimer(T1);
 	repeatUntil(time1(T1) >= 9000){
@@ -214,7 +210,29 @@ task avoid(){ //avoid behaviour
 }
 
 task observe(){ //observe Behaviour
+	long longestPath = 0;
+	bool newPath = true;
+	long prevGyro = 0;
+	long gyroPos = 0;
 	while (true){
+		//long leftWheel = leftmotorencoder/Speed;
+		//long rightWheel = rightmotorencoder/Speed;
+		
+		if (foundLine && newPath){
+			clearTimer(T4);	
+			newPath = false;
+		}
+		
+		if (leftWheel-rightWheel < 7? || rightWheel - leftWheel < 7?){
+			longestPath = time1(T4);
+			newPath = true;
+		}
+		
+		if (longestPath != 0 && time1(T4) >= longestPath/2){
+			paused = true;	
+		}
+		
+		
 		//make sure to follow line.
 		//check wheels havent turned more than a given amount
 		//if they have then stop timer and record time if bigger than last recorded time
@@ -241,11 +259,11 @@ task pause(){
 	
 	while(true){
 		repeatUntil(getButtonPress(buttonEnter)==0){
-			paused = true;	
-		}
-		
-		repeatUntil(getButtonPress(buttonEnter)==0){
-			paused = false;	
+			if (paused){
+				paused = false;	
+			} else {
+				paused = true;
+			}
 		}
 	}
 }
