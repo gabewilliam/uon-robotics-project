@@ -13,9 +13,11 @@ long maxLight, minLight;
 
 long lightThreshold = 1100;
 
-float errP, errI, errD, errPrev, maxCap, minCap;
+float errP, errI, errD, errPrev, maxCap, minCap, errDPrev, secondDeriv;
 long setPt = 500;
 float setPtTolerance = 50;
+
+float[50] lightReadings;
 
 //PID Coefficients
 const float kP = 1.4;
@@ -111,7 +113,7 @@ task forage(){ //forage behaviour
 		if (leftSpeed < 30){
 			forageCmd.lSpeed = leftSpeed + spiralFactor;
 		}
-
+		
 	}
 }
 
@@ -122,6 +124,12 @@ task follow() { //follow behaviour
 	while(true){
 
 		HTCS2readRawWhite(S3, true, avg);
+		
+		//Slide window
+		for(int i = 0; i < 49, i++){
+			lightReadings[i] = lightReadings[i+1];
+		}
+		lightReadings[49] = avg;
 
 		dt = time1(T2);
 		clearTimer(T2);
@@ -130,7 +138,11 @@ task follow() { //follow behaviour
 		errI += dt * errPrev;
 		errP = setPt - avg;
 
+		secondDeriv = (errD - errDPrev) / dt;
+
+		errDPrev = errD;
 		errPrev = avg;
+		
 		if(errP < 0){
 			followCmd.rSpeed = baseSpeed + maxCap * ( (kP * errP) + (kI * errI) + (kD * errD) );
 			followCmd.lSpeed = baseSpeed - maxCap * ( (kP * errP) + (kI * errI) + (kD * errD) );
@@ -157,10 +169,15 @@ task follow() { //follow behaviour
 			followCmd.broadcasting = false;
 		}
 
-		if((avg <= ( setPt + setPtTolerance)) && (!foundLine)){
+		if((avg <= (setPt + setPtTolerance)) && (!foundLine)){
 			followCmd.broadcasting = true;
 			foundLine = true;
 			wipeError();
+			//Rotate on the spot to line up with track
+			repeatUntil(avg == setPt){
+				followCmd.lSpeed = 3;
+				followCmd.rSpeed = -3;
+			}
 		}
 
 		sleep(sampleLength);
@@ -245,20 +262,6 @@ task observe(){ //observe Behaviour
 	}
 }
 
-task calculateErrors(){
-
-	dt = time1(T2);
-	clearTimer(T2);
-
-	errD = (errP - errPrev) / dt;
-	errI += dt * errPrev;
-
-	errPrev = errP;
-
-	sleep(sampleLength);
-
-}
-
 task pause(){
 	
 	while(true){
@@ -274,7 +277,6 @@ task pause(){
 
 task main(){
 
-	//startTask(calculateErrors);
 	while(getButtonPress(buttonEnter)==0){
 		displayTextLine(0, "Press for white");
 	}
