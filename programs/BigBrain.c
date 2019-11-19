@@ -254,28 +254,35 @@ task avoid(){ //avoid behaviour
 				avoidCmd.rSpeed = -baseSpeed;
   		}
   		//calculate how long the robot turned right whilst trying to avoid object
-  		long time = time1(T1)*1.7;
+  		long time = time1(T1);
 
   		//once clear of object drive straight for 8 seconds, set value for robot avoid
   		clearTimer(T1);
 			repeatUntil(time1(T1) >= 8000){
-  			avoidCmd.lSpeed = baseSpeed;
-				avoidCmd.rSpeed = baseSpeed;
+  			lSpeed = baseSpeed;
+				rSpeed = baseSpeed;
 			}
 			
 			//turn left for 1.7 times the length of the time we took to avoid object originally
 			clearTimer(T1);
-			repeatUntil(time1(T1) >= time){
-  			avoidCmd.lSpeed = -baseSpeed;
-				avoidCmd.rSpeed = baseSpeed;
+			repeatUntil(time1(T1) >= time*1.7){
+  			lSpeed = -baseSpeed;
+				rSpeed = baseSpeed;
   		}
 
   		//drive straight for 9 seconds to get back to track, set value for robot avoid
   		clearTimer(T1);
 			repeatUntil(time1(T1) >= 9000){
-  			avoidCmd.lSpeed = baseSpeed;
-				avoidCmd.rSpeed = baseSpeed;
+  			lSpeed = baseSpeed;
+				rSpeed = baseSpeed;
 			}
+		
+		//turn back to original direction
+		clearTimer(T1);
+			repeatUntil(time1(T1) >= time*0.7){
+  			lSpeed = baseSpeed;
+				rSpeed = -baseSpeed;
+  		}
 			
 			//once this procedure of avoiding is done, stop broadcasting avoid
 			avoidCmd.broadcasting = false;
