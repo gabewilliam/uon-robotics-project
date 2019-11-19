@@ -13,28 +13,39 @@ long maxLight, minLight;
 
 long lightThreshold = 1100;
 
-float errP, errI, errD, errPrev, maxCap, minCap;
+float errP, errI, errD, errPrev, maxCap, minCap, errDPrev, secondDeriv;
 long setPt = 500;
 float setPtTolerance = 50;
+
+float lightReadings[50];
+float darkReadings[50];
 
 //PID Coefficients
 const float kP = 1.4;
 const float kI = 0.000002;
 const float kD = 0.5;
 
-const float baseSpeed = 9;
+const float baseSpeed =8;
 float leftSpeed = 0;
 float rightSpeed = 0;
-float spiralFactor = 0.33;
+float spiralFactor = 0.2;
 float timeSinceLostLine = 0;
+
+//bool for pause
+bool paused = false;
+
+//for observe
+long longestPath = 0;
+bool newStraight = true;
 
 float dt = 0;
 const float sampleLength = 50;
 
 /* Timers
 	T1: Object avoidance
-	T2: PID rrror monitor
+	T2: PID error monitor
 	T3: Track time since lost line
+	T4: Observe timer 
 */
 
 //Command request struct for behaviours to request motor control
@@ -50,75 +61,128 @@ cmdRequest forageCmd;
 cmdRequest avoidCmd;
 cmdRequest observeCmd;
 
-void wipeError(){
+void wipeError(){ //Set all PID error values to 0
 	errP = 0;
 	errI = 0;
 	errD = 0;
 }
 
-void tryCmd(cmdRequest cmd){
-	if(cmd.broadcasting){
-		leftSpeed = cmd.lSpeed;
-		rightSpeed = cmd.rSpeed;
-	}
+void display(){
+		
+		displayTextLine(0,"Current Light: %f",avg);
+		displayTextLine(1,"Current Target: %f", setPt);		
+		
+		if (forageCmd.broadcasting) {
+			displayTextLine(3,"Forage Behaviour: True,%i,%i", forageCmd.lSpeed, forageCmd.rSpeed);
+		} else {
+			displayTextLine(3,"Forage Behaviour: False,%i,%i", forageCmd.lSpeed, forageCmd.rSpeed);
+		}
+	
+		if (followCmd.broadcasting) {
+			displayTextLine(4,"Follow Behaviour: True,%i,%i", followCmd.lSpeed, followCmd.rSpeed);
+		} else {
+			displayTextLine(4,"Follow Behaviour: False,%i,%i", followCmd.lSpeed, followCmd.rSpeed);
+		}
+		
+		if (avoidCmd.broadcasting) {
+			displayTextLine(5,"Avoid Behaviour: True,%i,%i", avoidCmd.lSpeed, avoidCmd.rSpeed);
+		} else {
+			displayTextLine(5,"Avoid Behaviour: False,%i,%i", avoidCmd.lSpeed, avoidCmd.rSpeed);
+		}
+		
+		if (observeCmd.broadcasting) {
+			displayTextLine(6,"Observe Behaviour: True,%i,%i",  observeCmd.lSpeed, observeCmd.rSpeed);
+		} else {
+			displayTextLine(6,"Observe Behaviour: False,%i,%i",  observeCmd.lSpeed, observeCmd.rSpeed);
+		}
+		
+		displayTextLine(7,"Current Longest Path: %i", longestPath); 
 }
 
-long turnFixed(cmdRequest cmd, long angle, int dir){ //Turn by a fixed amount
-	resetGyro(gyro);
-	repeatUntil(getGyroDegrees(gyro) >= angle){
-		cmd.lSpeed = 20 * dir;
-		cmd.rSpeed = -20 * dir;
-	}
-	return getGyroDegrees(gyro);
+void tryCmd(cmdRequest cmd){
+
+	//sets left and right speed depending on behaviour activity
+	//overwrites values when higher level behaviours are checked
+		if(cmd.broadcasting){
+			leftSpeed = cmd.lSpeed;
+			rightSpeed = cmd.rSpeed;
+		}
+		
 }
 
 task arbiter(){ //Behaviour arbitration
 	while(true){
-		tryCmd(forageCmd);
-		tryCmd(followCmd);
-		tryCmd(avoidCmd);
-		//tryCmd(observeCmd);
+		
+		if (!paused){
+			eraseDisplay();
+			//this is setting speed of motors depending which behaviour is active
+			//level 0
+			tryCmd(forageCmd);
+			//level 1
+			tryCmd(followCmd);
+			//level 2
+			tryCmd(avoidCmd);
+			//level 3
+			tryCmd(observeCmd);	
+			
+		} else {
+		
+			leftSpeed = 0;
+			rightSpeed = 0;
+			display();
+			
+		}
+		
 		setMotorSpeed(leftMotor, leftSpeed);
 		setMotorSpeed(rightMotor, rightSpeed);
 	}
 }
 
-task forage(){
+task forage(){ //forage behaviour
 	forageCmd.name = "Forage";
 	while(true){
-
-		sleep(100);
-
+		
+		//always true as is the level 0 behaviour
 		forageCmd.broadcasting = true;
 		forageCmd.rSpeed = 30;
-
+		
+		//set motor speed to spiral around the inside of the track to find the track
 		if (leftSpeed < 30){
 			forageCmd.lSpeed = leftSpeed + spiralFactor;
 		}
-
+		
 	}
 }
 
-task follow() {
+task follow() { //follow behaviour
 
 	followCmd.name = "Follow";
 	clearTimer(T2);
 	while(true){
 
-		//HTCS2readRawRGB(S3, true, r,g,b);
-		//avg = (0.3*r + 0.59*g + 0.11*b)/3;
-
 		HTCS2readRawWhite(S3, true, avg);
+		
+		////Determine light or dark
+		//for(int i = 0; i < 49; i++){
+		//	lightReadings[i] = lightReadings[i+1];
+		//}
+		//lightReadings[49] = avg;
 
+		//Get time since previous cycle
 		dt = time1(T2);
 		clearTimer(T2);
 
-		errD = (avg - errPrev) / dt;
-		errI += dt * errPrev;
-		errP = setPt - avg;
+		
+		errD = (avg - errPrev) / dt; //Differential error
+		errI += dt * errPrev; //Integral error
+		errP = setPt - avg; //Proportional error
 
-		errPrev = avg;
-		if(errP < 0){
+		//secondDeriv = (errD - errDPrev) / dt;
+
+		//errDPrev = errD;
+		errPrev = avg; 
+		
+		if(errP < 0){ //If the light value is too dark
 			followCmd.rSpeed = baseSpeed + maxCap * ( (kP * errP) + (kI * errI) + (kD * errD) );
 			followCmd.lSpeed = baseSpeed - maxCap * ( (kP * errP) + (kI * errI) + (kD * errD) );
 		}
@@ -127,16 +191,19 @@ task follow() {
 			followCmd.lSpeed = baseSpeed - minCap * ( (kP * errP) + (kI * errI) + (kD * errD) );
 		}
 
-		if(kI * errI >= 20){
+		if(kI * errI >= 20){ //Avoid integral wind-up
 			errI = 0;
 		}
 
+		//Start tracking time since we lost the line
 		if(avg >= lightThreshold && foundLine){
 			//Start timer
 			foundLine = false;
 			clearTimer(T3);
 		}
 
+		//If we still haven't relocated the line after 2sec of losing it
+		// the behaviour relinquishes motor control until it is found again.
 		if(!foundLine && time1(T3) >= 2000){
 			followCmd.lSpeed = 0;
 			followCmd.rSpeed = 0;
@@ -144,99 +211,149 @@ task follow() {
 			followCmd.broadcasting = false;
 		}
 
-		if((avg <= ( setPt + setPtTolerance)) && (!foundLine)){
-			followCmd.broadcasting = true;
+		//Line has been relocated
+		if((avg <= (setPt + setPtTolerance)) && (!foundLine)){
+			followCmd.broadcasting = true; //Request motor control again
 			foundLine = true;
-			wipeError();
+			wipeError(); //Reset errors
+			//Rotate on the spot to line up with track
+			repeatUntil(avg >= setPt){ /*needs help*/
+				followCmd.lSpeed = 3;
+				followCmd.rSpeed = -3;
+			}
 		}
 
-		sleep(sampleLength);
+		sleep(sampleLength); //Aim for dt=sampleLength
 	}
 }
 
-task avoid(){
+task avoid(){ //avoid behaviour
 	while (true){
 
-		//if ((getUSDistance(leftSonar) < 10) || (getUSDistance(rightSonar) < 10) ){
+		//get left distance and right distance
+		long leftDist = getUSDistance(leftSonar);
+		long rightDist = getUSDistance(rightSonar);
 
-  //    avoidCmd.broadcasting = true;
-  //    //avoidCmd.lSpeed = 0;
-  //   // avoidCmd.rSpeed = 0;
+  	//detect object at 15cm or less and set avoid to active
+  	if (leftDist < 15){
+    	avoidCmd.broadcasting = true;
+    	avoidCmd.lSpeed = 0;
+    	avoidCmd.rSpeed = 0;
+  	}
 
-  //  }	//else {
+  	//if we have seen an object run this section of code
+  	//this will override every other behaviour
+  	if (avoidCmd.broadcasting){
+  		//clear timer1 
+  		//turn right until robot no longer sees the object
+  		clearTimer(T1);
+  		repeatUntil(leftDist >= 25){
+  			leftDist = getUSDistance(leftSonar);
+				rightDist = getUSDistance(rightSonar);
+  			avoidCmd.lSpeed = baseSpeed;
+				avoidCmd.rSpeed = -baseSpeed;
+  		}
+  		//calculate how long the robot turned right whilst trying to avoid object
+  		long time = time1(T1)*1.7;
 
-  //  //	avoidCmd.broadcasting = false;
-  //  //}
+  		//once clear of object drive straight for 8 seconds, set value for robot avoid
+  		clearTimer(T1);
+			repeatUntil(time1(T1) >= 8000){
+  			avoidCmd.lSpeed = baseSpeed;
+				avoidCmd.rSpeed = baseSpeed;
+			}
+			
+			//turn left for 1.7 times the length of the time we took to avoid object originally
+			clearTimer(T1);
+			repeatUntil(time1(T1) >= time){
+  			avoidCmd.lSpeed = -baseSpeed;
+				avoidCmd.rSpeed = baseSpeed;
+  		}
 
-  //  while (avoidCmd.broadcasting){
+  		//drive straight for 9 seconds to get back to track, set value for robot avoid
+  		clearTimer(T1);
+			repeatUntil(time1(T1) >= 9000){
+  			avoidCmd.lSpeed = baseSpeed;
+				avoidCmd.rSpeed = baseSpeed;
+			}
+			
+			//once this procedure of avoiding is done, stop broadcasting avoid
+			avoidCmd.broadcasting = false;
+			avoidCmd.lSpeed = 0;
+			avoidCmd.rSpeed = 0;
+			
+		}
+	}
 
-  //	  if ((getUSDistance(leftSonar) < 10) || (getUSDistance(rightSonar) < 10) ){
-  //  			avoidCmd.lSpeed =	botSpeed +(30 - getUSDistance(leftSonar));
-		//			avoidCmd.rSpeed = botSpeed - (15- getUSDistance(leftSonar));
+}
 
- 	// 		}else {
- 	// 		clearTimer(T1);
- 	// 			repeatUntil(time1(T1) >= 2000){
- 	// 				avoidCmd.lSpeed = botSpeed;
- 	// 				avoidCmd.rSpeed = botSpeed;
- 	// 			}
+task observe(){ //observe Behaviour
 
- 	// 		}
-
-
+	while (true){
+		//long leftWheel = leftmotorencoder/Speed;
+		//long rightWheel = rightmotorencoder/Speed;
+		
+		//once found the line and on a new straight start timer to
+		//see how long the robot is on this straight for
+		if (foundLine && newStraight){
+			clearTimer(T4);	
+			newStraight = false;
+			resetGyro(gyro);
+		}
+		
+		//if you over turn stop the timer and record how long you went straight for
+		//if (leftWheel-rightWheel < 7? || rightWheel - leftWheel < 7?){
+		//	longestPath = time1(T4);
+		//	newStraight = true;
+	//	} //attempt 1
+		
+		if (getGyroDegrees(Gyro) >= 90){
+			longestPath = time1(T4);
+			newStraight = true;
+		} //attempt 2
+		
+		//pause when your own the longest straight
+		if ((longestPath != 0) && (time1(T4) >= longestPath/2)){
+			observeCmd.broadcasting = true;
+			observeCmd.lSpeed = 0;
+			observeCmd.rSpeed = 0;
+		}
+		
 	}
 }
 
-task calculateErrors(){
-
-	dt = time1(T2);
-	clearTimer(T2);
-
-	errD = (errP - errPrev) / dt;
-	errI += dt * errPrev;
-
-	errPrev = errP;
-
-	sleep(sampleLength);
-
-}
-
-void display(){
-		//string foll,fora,avo;
-		//if(followCmd.broadcasting){
-		//	foll = "True";
-		//}
-		//else{
-		//	foll = "False";
-		//}
-		//if(forageCmd.broadcasting){
-		//	fora = "True";
-		//}
-		//else{
-		//	fora = "False";
-		//}
-		//if(avoidCmd.broadcasting){
-		//	avo = "True";
-		//}
-		//else{
-		//	avo = "False";
-		//}
-		//displayTextLine(0, "Forage: %s, %f, %f", fora, forageCmd.lSpeed, forageCmd.rSpeed);
-		//displayTextLine(2, "Follow: %s, %f, %f", foll, followCmd.lSpeed, followCmd.rSpeed);
-		//displayTextLine(4, "Avoid: %s, %f, %f", avo, avoidCmd.lSpeed, avoidCmd.rSpeed);
-		//displayTextLine(6, "Average Colour: %i", avg);
+task pause(){
+	while(true){
+		
+	waitForButtonPress();
+	
+		if (getButtonPress(buttonEnter)==1){
+			if (paused){
+				
+				paused = false;
+				eraseDisplay();
+				
+			} else {
+			
+				paused = true;
+				
+			}
+		}
+		
+	}
 }
 
 task main(){
 
-	//startTask(calculateErrors);
+	//get white value after button press
 	while(getButtonPress(buttonEnter)==0){
 		displayTextLine(0, "Press for white");
 	}
 
 	HTCS2readRawWhite(S3, true, maxLight);
-	sleep(500);
+	sleep(300);
 
+	//get black value after button press
 	while(getButtonPress(buttonEnter)==0){
 		displayTextLine(0, "White: %f", maxLight);
 		displayTextLine(2, "Press for Black");
@@ -244,45 +361,42 @@ task main(){
 
 	HTCS2readRawWhite(S3, true, minLight);
 	displayTextLine(2, "Black: %f", minLight);
-	sleep(500);
+	sleep(300);
 
+	//get target light/set point after button press
 	while(getButtonPress(buttonEnter)==0){
 		displayTextLine(4, "Press for set point");
 	}
 
 	HTCS2readRawWhite(S3, true, setPt);
 	displayTextLine(4, "Set pt: %f", setPt);
-	sleep(500);
+	sleep(300);
 
 	lightThreshold = maxLight;
-	//setPt = (black + white)/2;
 
+	//values to stop steering being too great or too little on extreme light changes
 	maxCap = baseSpeed/maxLight;
 	minCap = baseSpeed/minLight;
 
+	//start robot after button press
 	while(getButtonPress(buttonEnter)==0){
 		displayTextLine(6, "Press to Start Robot");
 	}
 
 	sleep(200);
 
+
+	//start behaviours
 	startTask(arbiter);
 	startTask(forage);
 	startTask(follow);
 	startTask(avoid);
+	startTask(observe);
+	startTask(pause);
+	eraseDisplay();
 
 	while (true){
-
-		display();
-
-	//	bool datalogOK = datalogOpen(0,4, true);
-	//	if(datalogOK){
-	//		datalogAddLong(0,avg);
-	//		datalogAddFloat(1, leftSpeed);
-	//		datalogAddFloat(2, rightSpeed);
-			//datalogAddFloat(3, (leftSpeed + rightSpeed) / (leftSpeed * rightSpeed));
-//		}
-//		datalogClose();
+	
 
 	}
 }
