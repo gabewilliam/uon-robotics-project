@@ -253,7 +253,7 @@ task avoid(){ //avoid behaviour
 			
 			//turn left for 1.7 times the length of the time we took to avoid object originally
 			clearTimer(T1);
-			repeatUntil(time1(T1) >= time*1.7){
+			repeatUntil(time1(T1) >= time*1.67){
   			lSpeed = -baseSpeed;
 				rSpeed = baseSpeed;
   		}
@@ -267,7 +267,7 @@ task avoid(){ //avoid behaviour
 		
 		//turn back to original direction
 		clearTimer(T1);
-			repeatUntil(time1(T1) >= time*0.7){
+			repeatUntil(time1(T1) >= time*0.67){
   			lSpeed = baseSpeed;
 				rSpeed = -baseSpeed;
   		}
@@ -275,7 +275,7 @@ task avoid(){ //avoid behaviour
 			//once this procedure of avoiding is done, stop broadcasting avoid
 			avoidCmd.broadcasting = false;
 			avoidCmd.lSpeed = 0;
-			avoidCmd.rSpeed = 0;
+			avoidCmd.rSpeed = 0; 
 			
 		}
 	}
