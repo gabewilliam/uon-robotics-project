@@ -31,9 +31,6 @@ float rightSpeed = 0;
 float spiralFactor = 0.2;
 float timeSinceLostLine = 0;
 
-//bool for pause
-bool paused = false;
-
 //for observe
 long longestPath = 0;
 bool newStraight = true;
@@ -112,26 +109,17 @@ void tryCmd(cmdRequest cmd){
 
 task arbiter(){ //Behaviour arbitration
 	while(true){
-		
-		if (!paused){
-			eraseDisplay();
-			//this is setting speed of motors depending which behaviour is active
-			//level 0
-			tryCmd(forageCmd);
-			//level 1
-			tryCmd(followCmd);
-			//level 2
-			tryCmd(avoidCmd);
-			//level 3
-			tryCmd(observeCmd);	
-			
-		} else {
-		
-			leftSpeed = 0;
-			rightSpeed = 0;
-			display();
-			
-		}
+		//this is setting speed of motors depending which behaviour is active
+		//level 0
+		tryCmd(forageCmd);
+		//level 1
+		tryCmd(followCmd);
+		//level 2
+		tryCmd(avoidCmd);
+		//level 3
+		tryCmd(observeCmd);	
+
+		display();
 		
 		setMotorSpeed(leftMotor, leftSpeed);
 		setMotorSpeed(rightMotor, rightSpeed);
@@ -328,28 +316,6 @@ task observe(){ //observe Behaviour
 		
 	}
 }
-
-task pause(){
-	while(true){
-		
-	waitForButtonPress();
-	
-		if (getButtonPress(buttonEnter)==1){
-			if (paused){
-				
-				paused = false;
-				eraseDisplay();
-				
-			} else {
-			
-				paused = true;
-				
-			}
-		}
-		
-	}
-}
-
 task main(){
 
 	//get white value after button press
@@ -399,7 +365,6 @@ task main(){
 	startTask(follow);
 	startTask(avoid);
 	startTask(observe);
-	startTask(pause);
 	eraseDisplay();
 
 	while (true){
