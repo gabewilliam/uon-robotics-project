@@ -11,20 +11,21 @@ bool foundLine = false;
 long avg;
 long maxLight, minLight;
 
-long lightThreshold = 1100;
+long maxLight = 1100;
 
 float errP, errI, errD, errPrev, maxCap, minCap, errDPrev, secondDeriv;
 long setPt = 500;
 float setPtTolerance = 50;
 
-float[50] lightReadings;
+float hiLightReadings[50];
+float lohiLightReadings[50];
 
 //PID Coefficients
 const float kP = 1.4;
 const float kI = 0.000002;
 const float kD = 0.5;
 
-const float baseSpeed =30;
+const float baseSpeed =8;
 float leftSpeed = 0;
 float rightSpeed = 0;
 float spiralFactor = 0.2;
@@ -44,6 +45,7 @@ const float sampleLength = 50;
 	T1: Object avoidance
 	T2: PID error monitor
 	T3: Track time since lost line
+	T4: Observe timer 
 */
 
 //Command request struct for behaviours to request motor control
@@ -59,43 +61,116 @@ cmdRequest forageCmd;
 cmdRequest avoidCmd;
 cmdRequest observeCmd;
 
-void wipeError(){
+void wipeError(){ //Set all PID error values to 0
 	errP = 0;
 	errI = 0;
 	errD = 0;
 }
 
-void display(cmdRequest cmd){
-
-		displayTextLine(0, cmd.name);
+void display(){
+		
+		displayTextLine(0,"Current Light: %f",avg);
+		displayTextLine(1,"Current Target: %f", setPt);		
+		
+		if (forageCmd.broadcasting) {
+			displayTextLine(3,"Forage Behaviour: True,%i,%i", forageCmd.lSpeed, forageCmd.rSpeed);
+		} else {
+			displayTextLine(3,"Forage Behaviour: False,%i,%i", forageCmd.lSpeed, forageCmd.rSpeed);
+		}
+	
+		if (followCmd.broadcasting) {
+			displayTextLine(4,"Follow Behaviour: True,%i,%i", followCmd.lSpeed, followCmd.rSpeed);
+		} else {
+			displayTextLine(4,"Follow Behaviour: False,%i,%i", followCmd.lSpeed, followCmd.rSpeed);
+		}
+		
+		if (avoidCmd.broadcasting) {
+			displayTextLine(5,"Avoid Behaviour: True,%i,%i", avoidCmd.lSpeed, avoidCmd.rSpeed);
+		} else {
+			displayTextLine(5,"Avoid Behaviour: False,%i,%i", avoidCmd.lSpeed, avoidCmd.rSpeed);
+		}
+		
+		if (observeCmd.broadcasting) {
+			displayTextLine(6,"Observe Behaviour: True,%i,%i",  observeCmd.lSpeed, observeCmd.rSpeed);
+		} else {
+			displayTextLine(6,"Observe Behaviour: False,%i,%i",  observeCmd.lSpeed, observeCmd.rSpeed);
+		}
+		
+		displayTextLine(7,"Current Longest Path: %i", longestPath); 
 }
 
 void tryCmd(cmdRequest cmd){
-	if (!paused){
+
+	//sets left and right speed depending on behaviour activity
+	//overwrites values when higher level behaviours are checked
 		if(cmd.broadcasting){
 			leftSpeed = cmd.lSpeed;
 			rightSpeed = cmd.rSpeed;
-			display(cmd);
 		}
-	} else {
-		leftSpeed = 0;
-		rightSpeed = 0;
-		displayTextLine(0,"Current Light: %f",avg);
-		displayTextLine(1,"Current Behaviour: %s", cmd.name);
-		displayTextLine(2,"Current Left Speed: %f", cmd.lSpeed);
-		displayTextLine(3,"Current Right Speed: %f", cmd.rSpeed);
-		displayTextLine(5,"Current Target: %f", setPt);
-		displayTextLine(6,"Current errP,errI,errD: %f,%f,%f", errP,errI,errD);
-		displayTextLine(8,"Current Longest Path: %f",longestPath); 
+		
+}
+
+task adjustLightLevels(){ //Use ordered weighted average to get current max and min light values
+
+	while(true){
+		sleep(100);
+		//Determine light or dark
+		if(avg <= setPt){ //dark
+			int wt = 0.098; 
+			float sum = 0;
+			for(int i = 0; i < 49; i++){
+				lohiLightReadings[i] = loLightReadings[i+1];
+				sum += wt*loLightReadings[i+1];
+				wt -= 0.002;
+			}
+			lohiLightReadings[49] = avg;
+			sum += 0.1*avg;
+			minLight = sum/2.55;
+		}
+		else{ //light
+			int wt = 0.098
+			float sum = 0;
+			for(int i = 0; i < 49; i++){
+				hiLightReadings[i] = hiLightReadings[i+1];
+				sum += wt*hiLightReadings[i+1];
+				wt -= 0.002;
+			}
+			hiLightReadings[49] = avg;
+			sum += 0.1*avg;
+			maxLight = sum/2.55; //Weights add to 2.55
+		}
+		
+		setPt = minLight + 100;
+		//values to stop steering being too great or too little on extreme light changes
+		maxCap = baseSpeed/maxLight;
+		minCap = baseSpeed/minLight;
 	}
+	
 }
 
 task arbiter(){ //Behaviour arbitration
 	while(true){
-		tryCmd(forageCmd);
-		tryCmd(followCmd);
-		tryCmd(avoidCmd);
-		tryCmd(observeCmd);
+		
+		if (!paused){
+			eraseDisplay();
+			//this is setting speed of motors depending which behaviour is active
+			//level 0
+			tryCmd(forageCmd);
+			//level 1
+			tryCmd(followCmd);
+			//level 2
+			tryCmd(avoidCmd);
+			//level 3
+			tryCmd(observeCmd);	
+			
+		} else {
+		
+			leftSpeed = 0;
+			rightSpeed = 0;
+			display();
+			
+		}
+		
 		setMotorSpeed(leftMotor, leftSpeed);
 		setMotorSpeed(rightMotor, rightSpeed);
 	}
@@ -104,12 +179,12 @@ task arbiter(){ //Behaviour arbitration
 task forage(){ //forage behaviour
 	forageCmd.name = "Forage";
 	while(true){
-
-		sleep(100);
-
+		
+		//always true as is the level 0 behaviour
 		forageCmd.broadcasting = true;
 		forageCmd.rSpeed = 30;
-
+		
+		//set motor speed to spiral around the inside of the track to find the track
 		if (leftSpeed < 30){
 			forageCmd.lSpeed = leftSpeed + spiralFactor;
 		}
@@ -123,27 +198,23 @@ task follow() { //follow behaviour
 	clearTimer(T2);
 	while(true){
 
-		HTCS2readRawWhite(S3, true, avg);
-		
-		//Slide window
-		for(int i = 0; i < 49, i++){
-			lightReadings[i] = lightReadings[i+1];
-		}
-		lightReadings[49] = avg;
+		HTCS2readRawWhite(S3, true, avg);		
 
+		//Get time since previous cycle
 		dt = time1(T2);
 		clearTimer(T2);
 
-		errD = (avg - errPrev) / dt;
-		errI += dt * errPrev;
-		errP = setPt - avg;
-
-		secondDeriv = (errD - errDPrev) / dt;
-
-		errDPrev = errD;
-		errPrev = avg;
 		
-		if(errP < 0){
+		errD = (avg - errPrev) / dt; //Differential error
+		errI += dt * errPrev; //Integral error
+		errP = setPt - avg; //Proportional error
+
+		//secondDeriv = (errD - errDPrev) / dt;
+
+		//errDPrev = errD;
+		errPrev = avg; 
+		
+		if(errP < 0){ //If the light value is too dark
 			followCmd.rSpeed = baseSpeed + maxCap * ( (kP * errP) + (kI * errI) + (kD * errD) );
 			followCmd.lSpeed = baseSpeed - maxCap * ( (kP * errP) + (kI * errI) + (kD * errD) );
 		}
@@ -152,16 +223,19 @@ task follow() { //follow behaviour
 			followCmd.lSpeed = baseSpeed - minCap * ( (kP * errP) + (kI * errI) + (kD * errD) );
 		}
 
-		if(kI * errI >= 20){
+		if(kI * errI >= 20){ //Avoid integral wind-up
 			errI = 0;
 		}
 
-		if(avg >= lightThreshold && foundLine){
+		//Start tracking time since we lost the line
+		if(avg >= maxLight && foundLine){
 			//Start timer
 			foundLine = false;
 			clearTimer(T3);
 		}
 
+		//If we still haven't relocated the line after 2sec of losing it
+		// the behaviour relinquishes motor control until it is found again.
 		if(!foundLine && time1(T3) >= 2000){
 			followCmd.lSpeed = 0;
 			followCmd.rSpeed = 0;
@@ -169,65 +243,86 @@ task follow() { //follow behaviour
 			followCmd.broadcasting = false;
 		}
 
+		//Line has been relocated
 		if((avg <= (setPt + setPtTolerance)) && (!foundLine)){
-			followCmd.broadcasting = true;
+			followCmd.broadcasting = true; //Request motor control again
 			foundLine = true;
-			wipeError();
+			wipeError(); //Reset errors
 			//Rotate on the spot to line up with track
-			repeatUntil(avg == setPt){
+			repeatUntil(avg >= setPt){ /*needs help*/
 				followCmd.lSpeed = 3;
 				followCmd.rSpeed = -3;
 			}
 		}
 
-		sleep(sampleLength);
+		sleep(sampleLength); //Aim for dt=sampleLength
 	}
 }
 
 task avoid(){ //avoid behaviour
 	while (true){
 
-	long leftDist = getUSDistance(leftSonar);
-	long rightDist = getUSDistance(rightSonar);
+		//get left distance and right distance
+		long leftDist = getUSDistance(leftSonar);
+		long rightDist = getUSDistance(rightSonar);
 
-  //detect object and start to reverse
-  if (leftDist < 15){
-    avoidCmd.broadcasting = true;
-    avoidCmd.lSpeed = 0;
-    avoidCmd.rSpeed = 0;
-    sleep(1000);
-  }
-
-  if (avoidCmd.broadcasting){
-  	clearTimer(T1);
-  	repeatUntil(leftDist >= 25){
-  		leftDist = getUSDistance(leftSonar);
-		rightDist = getUSDistance(rightSonar);
-  		avoidCmd.lSpeed = baseSpeed;
-		avoidCmd.rSpeed = -baseSpeed;
-  	}
-  	long time = time1(T1)*1.7;
-
-  	clearTimer(T1);
-	repeatUntil(time1(T1) >= 8000){
-  		avoidCmd.lSpeed = baseSpeed;
-		avoidCmd.rSpeed = baseSpeed;
-	}
-	clearTimer(T1);
-	repeatUntil(time1(T1) >= time){
-  		avoidCmd.lSpeed = -baseSpeed;
-		avoidCmd.rSpeed = baseSpeed;
+  	//detect object at 15cm or less and set avoid to active
+  	if (leftDist < 15){
+    	avoidCmd.broadcasting = true;
+    	avoidCmd.lSpeed = 0;
+    	avoidCmd.rSpeed = 0;
   	}
 
-  	clearTimer(T1);
-	repeatUntil(time1(T1) >= 9000){
-  		avoidCmd.lSpeed = baseSpeed;
-		avoidCmd.rSpeed = baseSpeed;
-	}
+  	//if we have seen an object run this section of code
+  	//this will override every other behaviour
+  	if (avoidCmd.broadcasting){
+  		//clear timer1 
+  		//turn right until robot no longer sees the object
+  		clearTimer(T1);
+  		repeatUntil(leftDist >= 25){
+  			leftDist = getUSDistance(leftSonar);
+				rightDist = getUSDistance(rightSonar);
+  			avoidCmd.lSpeed = baseSpeed;
+				avoidCmd.rSpeed = -baseSpeed;
+  		}
+  		//calculate how long the robot turned right whilst trying to avoid object
+  		long time = time1(T1);
 
-	avoidCmd.broadcasting = false;
+  		//once clear of object drive straight for 8 seconds, set value for robot avoid
+  		clearTimer(T1);
+			repeatUntil(time1(T1) >= 8000){
+  			lSpeed = baseSpeed;
+				rSpeed = baseSpeed;
+			}
+			
+			//turn left for 1.7 times the length of the time we took to avoid object originally
+			clearTimer(T1);
+			repeatUntil(time1(T1) >= time*1.7){
+  			lSpeed = -baseSpeed;
+				rSpeed = baseSpeed;
+  		}
+
+  		//drive straight for 9 seconds to get back to track, set value for robot avoid
+  		clearTimer(T1);
+			repeatUntil(time1(T1) >= 9000){
+  			lSpeed = baseSpeed;
+				rSpeed = baseSpeed;
+			}
+		
+		//turn back to original direction
+		clearTimer(T1);
+			repeatUntil(time1(T1) >= time*0.7){
+  			lSpeed = baseSpeed;
+				rSpeed = -baseSpeed;
+  		}
+			
+			//once this procedure of avoiding is done, stop broadcasting avoid
+			avoidCmd.broadcasting = false;
+			avoidCmd.lSpeed = 0;
+			avoidCmd.rSpeed = 0;
+			
+		}
 	}
-}
 
 }
 
@@ -237,6 +332,8 @@ task observe(){ //observe Behaviour
 		//long leftWheel = leftmotorencoder/Speed;
 		//long rightWheel = rightmotorencoder/Speed;
 		
+		//once found the line and on a new straight start timer to
+		//see how long the robot is on this straight for
 		if (foundLine && newStraight){
 			clearTimer(T4);	
 			newStraight = false;
@@ -244,10 +341,10 @@ task observe(){ //observe Behaviour
 		}
 		
 		//if you over turn stop the timer and record how long you went straight for
-		if (leftWheel-rightWheel < 7? || rightWheel - leftWheel < 7?){
-			longestPath = time1(T4);
-			newStraight = true;
-		} //attempt 1
+		//if (leftWheel-rightWheel < 7? || rightWheel - leftWheel < 7?){
+		//	longestPath = time1(T4);
+		//	newStraight = true;
+	//	} //attempt 1
 		
 		if (getGyroDegrees(Gyro) >= 90){
 			longestPath = time1(T4);
@@ -255,35 +352,47 @@ task observe(){ //observe Behaviour
 		} //attempt 2
 		
 		//pause when your own the longest straight
-		if (longestPath != 0 && time1(T4) >= longestPath/2){
-			paused = true;	
+		if ((longestPath != 0) && (time1(T4) >= longestPath/2)){
+			observeCmd.broadcasting = true;
+			observeCmd.lSpeed = 0;
+			observeCmd.rSpeed = 0;
 		}
 		
 	}
 }
 
 task pause(){
-	
 	while(true){
-		repeatUntil(getButtonPress(buttonEnter)==0){
+		
+	waitForButtonPress();
+	
+		if (getButtonPress(buttonEnter)==1){
 			if (paused){
-				paused = false;	
+				
+				paused = false;
+				eraseDisplay();
+				
 			} else {
+			
 				paused = true;
+				
 			}
 		}
+		
 	}
 }
 
 task main(){
 
+	//get white value after button press
 	while(getButtonPress(buttonEnter)==0){
 		displayTextLine(0, "Press for white");
 	}
 
 	HTCS2readRawWhite(S3, true, maxLight);
-	sleep(500);
+	sleep(300);
 
+	//get black value after button press
 	while(getButtonPress(buttonEnter)==0){
 		displayTextLine(0, "White: %f", maxLight);
 		displayTextLine(2, "Press for Black");
@@ -291,22 +400,27 @@ task main(){
 
 	HTCS2readRawWhite(S3, true, minLight);
 	displayTextLine(2, "Black: %f", minLight);
-	sleep(500);
+	sleep(300);
 
+	//get target light/set point after button press
 	while(getButtonPress(buttonEnter)==0){
 		displayTextLine(4, "Press for set point");
 	}
 
 	HTCS2readRawWhite(S3, true, setPt);
 	displayTextLine(4, "Set pt: %f", setPt);
-	sleep(500);
+	sleep(300);
 
-	lightThreshold = maxLight;
-	//setPt = (black + white)/2;
-
+	//values to stop steering being too great or too little on extreme light changes
 	maxCap = baseSpeed/maxLight;
 	minCap = baseSpeed/minLight;
 
+	for(int i=0; i<50; i++){
+		loLightReadings[i] = minLight;
+		hiLightReadings[i] = maxLight;
+	}
+
+	//start robot after button press
 	while(getButtonPress(buttonEnter)==0){
 		displayTextLine(6, "Press to Start Robot");
 	}
@@ -314,12 +428,14 @@ task main(){
 	sleep(200);
 
 
+	//start behaviours
 	startTask(arbiter);
 	startTask(forage);
 	startTask(follow);
 	startTask(avoid);
-	startTask(pause);
 	startTask(observe);
+	startTask(pause);
+	startTask(adjustLightLevels);
 	eraseDisplay();
 
 	while (true){
