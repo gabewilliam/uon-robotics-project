@@ -328,11 +328,7 @@ task avoid(){ //avoid behaviour
 }
 
 task observe(){ //observe Behaviour
-
 	while (true){
-		//long leftWheel = leftmotorencoder/Speed;
-		//long rightWheel = rightmotorencoder/Speed;
-		
 		//once found the line and on a new straight start timer to
 		//see how long the robot is on this straight for
 		if (foundLine && newStraight){
@@ -341,19 +337,14 @@ task observe(){ //observe Behaviour
 			resetGyro(gyro);
 		}
 		
-		//if you over turn stop the timer and record how long you went straight for
-		//if (leftWheel-rightWheel < 7? || rightWheel - leftWheel < 7?){
-		//	longestPath = time1(T4);
-		//	newStraight = true;
-	//	} //attempt 1
-		
-		if (getGyroDegrees(Gyro) >= 90){
+		if (getGyroDegrees(gyro) >= 90){
 			longestPath = time1(T4);
 			newStraight = true;
-		} //attempt 2
+			resetGyro(gyro);
+		} 
 		
 		//pause when your own the longest straight
-		if ((longestPath != 0) && (time1(T4) >= longestPath/2)){
+		if ((longestPath != 0) && (time1(T4) >= longestPath/2) && (nPgmTime >= 60000)){
 			observeCmd.broadcasting = true;
 			observeCmd.lSpeed = 0;
 			observeCmd.rSpeed = 0;
