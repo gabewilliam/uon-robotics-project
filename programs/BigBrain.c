@@ -9,7 +9,7 @@
 
 bool foundLine = false;
 long avg;
-long maxLight, minLight;
+long maxLight, minLight, maxLight, minLight;
 
 long lightThreshold = 1100;
 
@@ -17,8 +17,8 @@ float errP, errI, errD, errPrev, maxCap, minCap, errDPrev, secondDeriv;
 long setPt = 500;
 float setPtTolerance = 50;
 
-float lightReadings[50];
-float darkReadings[50];
+float hiLightReadings[50];
+float lohiLightReadings[50];
 
 //PID Coefficients
 const float kP = 1.4;
@@ -30,6 +30,9 @@ float leftSpeed = 0;
 float rightSpeed = 0;
 float spiralFactor = 0.2;
 float timeSinceLostLine = 0;
+
+//bool for pause
+bool paused = false;
 
 //for observe
 long longestPath = 0;
@@ -142,6 +145,54 @@ task forage(){ //forage behaviour
 	}
 }
 
+task adjustLightLevels(){ //Use max and min values from the two sliding windows
+
+	while(true){
+		sleep(200);
+		
+		//Determine light or dark
+		if(avg <= setPt - 50){ //dark
+			float min = maxLight;
+			for(int i = 0; i < 49; i++){
+				lohiLightReadings[i] = loLightReadings[i+1];
+				if(loLightReadings[i+1] < min){
+					min = loLightReadings[i+1];
+				}
+			}
+			lohiLightReadings[49] = avg;
+			if(avg < min){
+				minLight = avg;
+			}
+			else{
+				minLight = min;
+			}
+		}
+		else if(avg >= setPt + 100){ //light
+			float max = 0;
+			for(int i = 0; i < 49; i++){
+				hiLightReadings[i] = hiLightReadings[i+1];
+				if(hiLightReadings[i+1] > max){
+					max = hiLightReadings[i+1];
+				}
+			}
+			hiLightReadings[49] = avg;
+			if(avg > max){
+				maxLight = avg;
+			}
+			else{
+				maxLight = max;
+			}
+		}
+		
+		setPt = minLight + 100; //Empirical: desired pt tends to be ~100 from black
+		lightThreshold = setPt + 400;
+		//Cap steering either side of set point based on max and min light values
+		maxCap = baseSpeed/maxLight;
+		minCap = baseSpeed/minLight;
+	}
+	
+}
+
 task follow() { //follow behaviour
 
 	followCmd.name = "Follow";
@@ -149,12 +200,6 @@ task follow() { //follow behaviour
 	while(true){
 
 		HTCS2readRawWhite(S3, true, avg);
-		
-		////Determine light or dark
-		//for(int i = 0; i < 49; i++){
-		//	lightReadings[i] = lightReadings[i+1];
-		//}
-		//lightReadings[49] = avg;
 
 		//Get time since previous cycle
 		dt = time1(T2);
@@ -345,11 +390,14 @@ task main(){
 	displayTextLine(4, "Set pt: %f", setPt);
 	sleep(300);
 
-	lightThreshold = maxLight;
-
 	//values to stop steering being too great or too little on extreme light changes
 	maxCap = baseSpeed/maxLight;
 	minCap = baseSpeed/minLight;
+
+	for(int i=0; i<50; i++){
+		loLightReadings[i] = minLight;
+		hiLightReadings[i] = maxLight;
+	}
 
 	//start robot after button press
 	while(getButtonPress(buttonEnter)==0){
