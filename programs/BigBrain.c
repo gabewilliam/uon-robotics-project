@@ -9,7 +9,7 @@
 
 bool foundLine = false;
 long avg;
-long maxLight, minLight, maxLight, minLight;
+long maxLight, minLight, cutoff;
 
 long lightThreshold = 1100;
 
@@ -17,19 +17,19 @@ float errP, errI, errD, errPrev, maxCap, minCap, errDPrev, secondDeriv;
 long setPt = 500;
 float setPtTolerance = 50;
 
-float hiLightReadings[50];
-float lohiLightReadings[50];
+const int windowSize = 20;
+float hiLightReadings[windowSize];
+float loLightReadings[windowSize];
 
 //PID Coefficients
-const float kP = 1.4;
+const float kP = 4.5;
 const float kI = 0.000002;
-const float kD = 0.5;
+const float kD = 1.1;
 
 const float baseSpeed =8;
 float leftSpeed = 0;
 float rightSpeed = 0;
 float spiralFactor = 0.2;
-float timeSinceLostLine = 0;
 
 //bool for pause
 bool paused = false;
@@ -45,7 +45,7 @@ const float sampleLength = 50;
 	T1: Object avoidance
 	T2: PID error monitor
 	T3: Track time since lost line
-	T4: Observe timer 
+	T4: Observe timer
 */
 
 //Command request struct for behaviours to request motor control
@@ -68,35 +68,38 @@ void wipeError(){ //Set all PID error values to 0
 }
 
 void display(){
-		
+
 		displayTextLine(0,"Current Light: %f",avg);
-		displayTextLine(1,"Current Target: %f", setPt);		
-		
+		displayTextLine(1,"Current Target: %f", setPt);
+		displayTextLine(2,"Max: %f", maxLight);
+		displayTextLine(3,"Min: %f", minLight);
+
 		if (forageCmd.broadcasting) {
-			displayTextLine(3,"Forage Behaviour: True,%i,%i", forageCmd.lSpeed, forageCmd.rSpeed);
+			displayTextLine(4,"Forage Behaviour: True,%i,%i", forageCmd.lSpeed, forageCmd.rSpeed);
 		} else {
-			displayTextLine(3,"Forage Behaviour: False,%i,%i", forageCmd.lSpeed, forageCmd.rSpeed);
+			displayTextLine(4,"Forage Behaviour: False,%i,%i", forageCmd.lSpeed, forageCmd.rSpeed);
 		}
-	
+
 		if (followCmd.broadcasting) {
-			displayTextLine(4,"Follow Behaviour: True,%i,%i", followCmd.lSpeed, followCmd.rSpeed);
+			displayTextLine(5,"Follow Behaviour: True,%i,%i", followCmd.lSpeed, followCmd.rSpeed);
 		} else {
-			displayTextLine(4,"Follow Behaviour: False,%i,%i", followCmd.lSpeed, followCmd.rSpeed);
+			displayTextLine(5,"Follow Behaviour: False,%i,%i", followCmd.lSpeed, followCmd.rSpeed);
 		}
-		
+
 		if (avoidCmd.broadcasting) {
-			displayTextLine(5,"Avoid Behaviour: True,%i,%i", avoidCmd.lSpeed, avoidCmd.rSpeed);
+			displayTextLine(6,"Avoid Behaviour: True,%i,%i", avoidCmd.lSpeed, avoidCmd.rSpeed);
 		} else {
-			displayTextLine(5,"Avoid Behaviour: False,%i,%i", avoidCmd.lSpeed, avoidCmd.rSpeed);
+			displayTextLine(6,"Avoid Behaviour: False,%i,%i", avoidCmd.lSpeed, avoidCmd.rSpeed);
 		}
-		
+
 		if (observeCmd.broadcasting) {
-			displayTextLine(6,"Observe Behaviour: True,%i,%i",  observeCmd.lSpeed, observeCmd.rSpeed);
+			displayTextLine(7,"Observe Behaviour: True,%i,%i",  observeCmd.lSpeed, observeCmd.rSpeed);
 		} else {
-			displayTextLine(6,"Observe Behaviour: False,%i,%i",  observeCmd.lSpeed, observeCmd.rSpeed);
+			displayTextLine(7,"Observe Behaviour: False,%i,%i",  observeCmd.lSpeed, observeCmd.rSpeed);
 		}
-		
-		displayTextLine(7,"Current Longest Path: %i", longestPath); 
+
+		displayTextLine(9,"Current Longest Path: %i", longestPath);
+		displayTextLine(10,"Program RunTime: %i", nPgmTime);
 }
 
 void tryCmd(cmdRequest cmd){
@@ -107,7 +110,7 @@ void tryCmd(cmdRequest cmd){
 			leftSpeed = cmd.lSpeed;
 			rightSpeed = cmd.rSpeed;
 		}
-		
+
 }
 
 task arbiter(){ //Behaviour arbitration
@@ -120,10 +123,10 @@ task arbiter(){ //Behaviour arbitration
 		//level 2
 		tryCmd(avoidCmd);
 		//level 3
-		tryCmd(observeCmd);	
+		tryCmd(observeCmd);
 
 		display();
-		
+
 		setMotorSpeed(leftMotor, leftSpeed);
 		setMotorSpeed(rightMotor, rightSpeed);
 	}
@@ -132,16 +135,21 @@ task arbiter(){ //Behaviour arbitration
 task forage(){ //forage behaviour
 	forageCmd.name = "Forage";
 	while(true){
-		
+
+		sleep(50);
 		//always true as is the level 0 behaviour
 		forageCmd.broadcasting = true;
-		forageCmd.rSpeed = 30;
-		
+		forageCmd.rSpeed = 50;
+
 		//set motor speed to spiral around the inside of the track to find the track
-		if (leftSpeed < 30){
-			forageCmd.lSpeed = leftSpeed + spiralFactor;
+		if (forageCmd.lSpeed <= 50){
+			forageCmd.lSpeed += spiralFactor;
 		}
-		
+		else if(forageCmd.lSpeed >= 50){
+			forageCmd.lSpeed=0;
+		}
+
+
 	}
 }
 
@@ -149,17 +157,17 @@ task adjustLightLevels(){ //Use max and min values from the two sliding windows
 
 	while(true){
 		sleep(200);
-		
+
 		//Determine light or dark
-		if(avg <= setPt - 50){ //dark
+		if(avg <= cutoff - 50){ //dark
 			float min = maxLight;
-			for(int i = 0; i < 49; i++){
-				lohiLightReadings[i] = loLightReadings[i+1];
+			for(int i = 0; i < (windowSize-1); i++){
+				loLightReadings[i] = loLightReadings[i+1];
 				if(loLightReadings[i+1] < min){
 					min = loLightReadings[i+1];
 				}
 			}
-			lohiLightReadings[49] = avg;
+			loLightReadings[windowSize-1] = avg;
 			if(avg < min){
 				minLight = avg;
 			}
@@ -167,15 +175,15 @@ task adjustLightLevels(){ //Use max and min values from the two sliding windows
 				minLight = min;
 			}
 		}
-		else if(avg >= setPt + 100){ //light
+		else if(avg >= cutoff + 100){ //light
 			float max = 0;
-			for(int i = 0; i < 49; i++){
+			for(int i = 0; i < (windowSize-1); i++){
 				hiLightReadings[i] = hiLightReadings[i+1];
 				if(hiLightReadings[i+1] > max){
 					max = hiLightReadings[i+1];
 				}
 			}
-			hiLightReadings[49] = avg;
+			hiLightReadings[windowSize-1] = avg;
 			if(avg > max){
 				maxLight = avg;
 			}
@@ -183,14 +191,17 @@ task adjustLightLevels(){ //Use max and min values from the two sliding windows
 				maxLight = max;
 			}
 		}
-		
-		setPt = minLight + 100; //Empirical: desired pt tends to be ~100 from black
-		lightThreshold = setPt + 400;
+
+		setPt = (minLight + 200); //Empirical: desired pt tends to be ~100 from black
+		if(setPt <= 200){
+			setPt = 400;
+		}
+		lightThreshold = (setPt + maxLight)/2;
 		//Cap steering either side of set point based on max and min light values
 		maxCap = baseSpeed/maxLight;
 		minCap = baseSpeed/minLight;
 	}
-	
+
 }
 
 task follow() { //follow behaviour
@@ -205,7 +216,7 @@ task follow() { //follow behaviour
 		dt = time1(T2);
 		clearTimer(T2);
 
-		
+
 		errD = (avg - errPrev) / dt; //Differential error
 		errI += dt * errPrev; //Integral error
 		errP = setPt - avg; //Proportional error
@@ -213,8 +224,8 @@ task follow() { //follow behaviour
 		//secondDeriv = (errD - errDPrev) / dt;
 
 		//errDPrev = errD;
-		errPrev = avg; 
-		
+		errPrev = avg;
+
 		if(errP < 0){ //If the light value is too dark
 			followCmd.rSpeed = baseSpeed + maxCap * ( (kP * errP) + (kI * errI) + (kD * errD) );
 			followCmd.lSpeed = baseSpeed - maxCap * ( (kP * errP) + (kI * errI) + (kD * errD) );
@@ -250,10 +261,10 @@ task follow() { //follow behaviour
 			foundLine = true;
 			wipeError(); //Reset errors
 			//Rotate on the spot to line up with track
-			repeatUntil(avg >= setPt){ /*needs help*/
-				followCmd.lSpeed = 3;
-				followCmd.rSpeed = -3;
-			}
+			//repeatUntil(avg >= setPt){ /*needs help*/
+			//	followCmd.lSpeed = 3;
+			//	followCmd.rSpeed = -3;
+			//}
 		}
 
 		sleep(sampleLength); //Aim for dt=sampleLength
@@ -277,7 +288,7 @@ task avoid(){ //avoid behaviour
   	//if we have seen an object run this section of code
   	//this will override every other behaviour
   	if (avoidCmd.broadcasting){
-  		//clear timer1 
+  		//clear timer1
   		//turn right until robot no longer sees the object
   		clearTimer(T1);
   		repeatUntil(leftDist >= 25){
@@ -292,36 +303,36 @@ task avoid(){ //avoid behaviour
   		//once clear of object drive straight for 8 seconds, set value for robot avoid
   		clearTimer(T1);
 			repeatUntil(time1(T1) >= 8000){
-  			lSpeed = baseSpeed;
-				rSpeed = baseSpeed;
+  			avoidCmd.lSpeed = baseSpeed;
+				avoidCmd.rSpeed = baseSpeed;
 			}
-			
+
 			//turn left for 1.7 times the length of the time we took to avoid object originally
 			clearTimer(T1);
 			repeatUntil(time1(T1) >= time*1.67){
-  			lSpeed = -baseSpeed;
-				rSpeed = baseSpeed;
+  			avoidCmd.lSpeed = -baseSpeed;
+				avoidCmd.rSpeed = baseSpeed;
   		}
 
   		//drive straight for 9 seconds to get back to track, set value for robot avoid
   		clearTimer(T1);
 			repeatUntil(time1(T1) >= 9000){
-  			lSpeed = baseSpeed;
-				rSpeed = baseSpeed;
+  			avoidCmd.lSpeed = baseSpeed;
+				avoidCmd.rSpeed = baseSpeed;
 			}
-		
+
 		//turn back to original direction
 		clearTimer(T1);
 			repeatUntil(time1(T1) >= time*0.67){
-  			lSpeed = baseSpeed;
-				rSpeed = -baseSpeed;
+  			avoidCmd.lSpeed = baseSpeed;
+				avoidCmd.rSpeed = -baseSpeed;
   		}
-			
+
 			//once this procedure of avoiding is done, stop broadcasting avoid
 			avoidCmd.broadcasting = false;
 			avoidCmd.lSpeed = 0;
-			avoidCmd.rSpeed = 0; 
-			
+			avoidCmd.rSpeed = 0;
+
 		}
 	}
 
@@ -332,24 +343,24 @@ task observe(){ //observe Behaviour
 		//once found the line and on a new straight start timer to
 		//see how long the robot is on this straight for
 		if (foundLine && newStraight){
-			clearTimer(T4);	
+			clearTimer(T4);
 			newStraight = false;
 			resetGyro(gyro);
 		}
-		
+
 		if (getGyroDegrees(gyro) >= 90){
 			longestPath = time1(T4);
 			newStraight = true;
 			resetGyro(gyro);
-		} 
-		
+		}
+
 		//pause when your own the longest straight
 		if ((longestPath != 0) && (time1(T4) >= longestPath/2) && (nPgmTime >= 60000)){
 			observeCmd.broadcasting = true;
 			observeCmd.lSpeed = 0;
 			observeCmd.rSpeed = 0;
 		}
-		
+
 	}
 }
 task main(){
@@ -380,7 +391,7 @@ task main(){
 	HTCS2readRawWhite(S3, true, setPt);
 	displayTextLine(4, "Set pt: %f", setPt);
 	sleep(300);
-
+	cutoff = setPt+200;
 	//values to stop steering being too great or too little on extreme light changes
 	maxCap = baseSpeed/maxLight;
 	minCap = baseSpeed/minLight;
@@ -402,12 +413,13 @@ task main(){
 	startTask(arbiter);
 	startTask(forage);
 	startTask(follow);
-	startTask(avoid);
-	startTask(observe);
+	//startTask(avoid);
+	//startTask(observe);
+	startTask(adjustLightLevels);
 	eraseDisplay();
 
 	while (true){
-	
+
 
 	}
 }
