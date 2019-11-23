@@ -17,9 +17,10 @@ float errP, errI, errD, errPrev, maxCap, minCap, errDPrev, secondDeriv;
 long setPt = 500;
 float setPtTolerance = 50;
 
-const int windowSize = 20;
+const int windowSize = 50;
 float hiLightReadings[windowSize];
 float loLightReadings[windowSize];
+float lightLevels[windowSize];
 
 //PID Coefficients
 const float kP = 4.5;
@@ -155,50 +156,33 @@ task forage(){ //forage behaviour
 }
 
 task adjustLightLevels(){ //Use max and min values from the two sliding windows
-//????
 	while(true){
-		sleep(200);
+		sleep(100);
 
-		//Determine light or dark
-		if(avg <= cutoff - 50){ //dark
-			float min = maxLight;
-			for(int i = 0; i < (windowSize-1); i++){
-				loLightReadings[i] = loLightReadings[i+1];
-				if(loLightReadings[i+1] < min){
-					min = loLightReadings[i+1];
+		if (foundLine){
+			float sum = 0;
+			for (int i = 0; i< windowSize-1; i++){
+				lightLevel[i] = lightLevel[i+1];
+				sum += lightLevel[i+1];
+				if (lightLevel[i+1] < min){
+					min = lightLevel[i+1];	
+				} else if (lightLevel[i+1] > max){
+					max = lightLevel[i+1];
 				}
+				
 			}
-			loLightReadings[windowSize-1] = avg;
-			if(avg < min){
-				minLight = avg;
+			lightLevel[windowSize-1] = avg;
+			if (avg < min){
+				min = avg;	
+			} else if (avg > min){
+				max = avg;	
 			}
-			else{
-				minLight = min;
-			}
+			sum += avg;
+			float mean = sum / windowSize;
+			setPt = mean;
+			lightThreshold = (setPt + maxLight)/2;
 		}
-		else if(avg >= cutoff + 100){ //light
-			float max = 0;
-			for(int i = 0; i < (windowSize-1); i++){
-				hiLightReadings[i] = hiLightReadings[i+1];
-				if(hiLightReadings[i+1] > max){
-					max = hiLightReadings[i+1];
-				}
-			}
-			hiLightReadings[windowSize-1] = avg;
-			if(avg > max){
-				maxLight = avg;
-			}
-			else{
-				maxLight = max;
-			}
-		}
-
-		setPt = (minLight + 200); //Empirical: desired pt tends to be ~100 from black
-		if(setPt <= 200){
-			setPt = 400;
-		}
-		lightThreshold = (setPt + maxLight)/2;
-		//Cap steering either side of set point based on max and min light values
+				
 		maxCap = baseSpeed/maxLight;
 		minCap = baseSpeed/minLight;
 	}
@@ -395,13 +379,14 @@ task main(){
 	maxCap = baseSpeed/maxLight;
 	minCap = baseSpeed/minLight;
 
-	for(int i=0; i<50; i++){ //????
-		loLightReadings[i] = minLight;
-		hiLightReadings[i] = maxLight;
+	for(int i=0; i<windowSize; i++){ 
+		lightLevel[i] = setPt;
+		//loLightReadings[i] = minLight;
+		//hiLightReadings[i] = maxLight;
 	}
 
 	//start robot after button press
-  displayTextLine(6, "Press to Start Robot");
+  	displayTextLine(6, "Press to Start Robot");
 	waitForButtonPress();
 	sleep(200);
 
