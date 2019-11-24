@@ -158,7 +158,8 @@ task forage(){ //forage behaviour
 task adjustLightLevels(){ //Use max and min values from the two sliding windows
 	while(true){
 		sleep(100);
-
+		//changes maybe on the day
+		//change max and min to be values from this array instead of all time
 		if (foundLine){
 			float sum = 0;
 			for (int i = 0; i< windowSize-1; i++){
@@ -245,11 +246,7 @@ task follow() { //follow behaviour
 			followCmd.broadcasting = true; //Request motor control again
 			foundLine = true;
 			wipeError(); //Reset errors
-			//Rotate on the spot to line up with track
-			//repeatUntil(avg >= setPt){ /*needs help*/
-			//	followCmd.lSpeed = 3;
-			//	followCmd.rSpeed = -3;
-			//}
+			
 		}
 
 		sleep(sampleLength); //Aim for dt=sampleLength
