@@ -162,6 +162,8 @@ task adjustLightLevels(){ //Use max and min values from the two sliding windows
 		//change max and min to be values from this array instead of all time
 		if (foundLine){
 			float sum = 0;
+			float min = maxLight;
+			float max = 0;
 			for (int i = 0; i< windowSize-1; i++){
 				lightLevel[i] = lightLevel[i+1];
 				sum += lightLevel[i+1];
