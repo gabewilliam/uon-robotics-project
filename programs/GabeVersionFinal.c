@@ -13,13 +13,14 @@ long maxLight, minLight, cutoff;
 
 long lightThreshold = 1100;
 
-float errP, errI, errD, errPrev, maxCap, minCap, errDPrev, secondDeriv;
+float errP, errI, errD, errPrev, maxCap, minCap;
 long setPt = 500;
 float setPtTolerance = 50;
 
 const int windowSize = 20;
 float hiLightReadings[windowSize];
 float loLightReadings[windowSize];
+float midLightReadings[windowSize];
 
 //PID Coefficients
 const float kP = 2.0;
@@ -30,9 +31,6 @@ const float baseSpeed =8;
 float leftSpeed = 0;
 float rightSpeed = 0;
 float spiralFactor = 0.2;
-
-//bool for pause
-bool paused = false;
 
 //for observe
 long longestPath = 0;
@@ -100,6 +98,7 @@ void display(){
 
 		displayTextLine(9,"Current Longest Path: %i", longestPath);
 		displayTextLine(10,"Program RunTime: %i", nPgmTime);
+		displayTextLine(11,"Gyro: %i", getGyroDegrees(gyro));
 }
 
 void tryCmd(cmdRequest cmd){
@@ -159,7 +158,7 @@ task adjustLightLevels(){ //Use mean values from the two sliding windows
 		sleep(100);
 
 		//Determine light or dark
-		if(avg <= cutoff - 50){ //dark
+		if(avg <= cutoff - 100){ //dark
 			float sum = 0;
 			for(int i = 0; i < (windowSize-1); i++){
 				loLightReadings[i] = loLightReadings[i+1];
@@ -169,7 +168,7 @@ task adjustLightLevels(){ //Use mean values from the two sliding windows
 			sum+= avg;
 			minLight = sum/windowSize;
 		}
-		else if(avg >= cutoff + 100){ //light
+		else if(avg >= cutoff + 150){ //light
 			float sum = 0;
 			for(int i = 0; i < (windowSize-1); i++){
 				hiLightReadings[i] = hiLightReadings[i+1];
@@ -179,11 +178,23 @@ task adjustLightLevels(){ //Use mean values from the two sliding windows
 			sum+=avg;
 			maxLight = sum/windowSize;
 		}
+		else{ //mid
+			float sum = 0;
+			for(int i = 0; i < (windowSize-1); i++){
+				midLightReadings[i] = midLightReadings[i+1];
+				sum+=midLightReadings[i+1];
+			}
+			midLightReadings[windowSize-1] = avg;
+			sum+=avg;
+			setPt = sum/windowSize;
+		}
 
-		setPt = (minLight + 200); //Empirical: desired pt tends to be ~100 from black
-		//if(setPt <= 200){
-		//	setPt = 400;
-		//}
+		if(lightThreshold - setPt <= 100){
+			setPt -= 100;
+		}
+		if(setPt - minLight <= 30){
+			setPt += 30;
+		}
 		lightThreshold = (minLight + maxLight)/2;
 		//cutoff = 500;
 		//Cap steering either side of set point based on max and min light values
@@ -234,7 +245,7 @@ task follow() { //follow behaviour
 
 		//If we still haven't relocated the line after 2sec of losing it
 		// the behaviour relinquishes motor control until it is found again.
-		if(!foundLine && time1(T3) >= 2000){
+		if(!foundLine && time1(T3) >= 4000){
 			followCmd.lSpeed = 0;
 			followCmd.rSpeed = 0;
 			sleep(100);
@@ -246,12 +257,7 @@ task follow() { //follow behaviour
 			followCmd.broadcasting = true; //Request motor control again
 			foundLine = true;
 			wipeError(); //Reset errors
-			Rotate on the spot to line up with track
-			repeatUntil(avg >= setPt){
-				HTCS2readRawWhite(S3, true, avg);
-				followCmd.lSpeed = 8;
-				followCmd.rSpeed = -8;
-			}
+
 		}
 
 		sleep(sampleLength); //Aim for dt=sampleLength
@@ -326,6 +332,7 @@ task avoid(){ //avoid behaviour
 }
 
 task observe(){ //observe Behaviour
+	//longestPath = 0;
 	while (true){
 		//once found the line and on a new straight start timer to
 		//see how long the robot is on this straight for
@@ -335,14 +342,14 @@ task observe(){ //observe Behaviour
 			resetGyro(gyro);
 		}
 
-		if (getGyroDegrees(gyro) >= 45){
+		if (getGyroDegrees(gyro) >= 35 || getGyroDegrees(gyro) <= -35){
 			longestPath = time1(T4);
 			newStraight = true;
 			resetGyro(gyro);
 		}
 
 		//pause when your own the longest straight
-		if ((longestPath != 0) && (time1(T4) >= longestPath/2) && (nPgmTime >= 60000)){
+		if ((longestPath != 0) && (time1(T4) >= longestPath/2) && (nPgmTime >= 240000)){
 			observeCmd.broadcasting = true;
 			observeCmd.lSpeed = 0;
 			observeCmd.rSpeed = 0;
@@ -353,31 +360,34 @@ task observe(){ //observe Behaviour
 
 task main(){
 
-	//get white value after button press
-	displayTextLine(0, "Press for white");
-	waitForButtonPress();
-  
+		//get white value after button press
+	while(getButtonPress(buttonEnter)==0){
+		displayTextLine(0, "Press for white");
+	}
+
 	HTCS2readRawWhite(S3, true, maxLight);
 	sleep(300);
 
 	//get black value after button press
-	displayTextLine(0, "White: %f", maxLight);
-	displayTextLine(2, "Press for Black");
-	waitForButtonPress();
+	while(getButtonPress(buttonEnter)==0){
+		displayTextLine(0, "White: %f", maxLight);
+		displayTextLine(2, "Press for Black");
+	}
 
 	HTCS2readRawWhite(S3, true, minLight);
 	displayTextLine(2, "Black: %f", minLight);
 	sleep(300);
 
 	//get target light/set point after button press
-	displayTextLine(4, "Press for set point");
-	waitForButtonPress();
+	while(getButtonPress(buttonEnter)==0){
+		displayTextLine(4, "Press for set point");
+	}
 
 	HTCS2readRawWhite(S3, true, setPt);
 	displayTextLine(4, "Set pt: %f", setPt);
 	sleep(300);
-	
-	cutoff = setPt+150;
+
+	cutoff = setPt;
 	//Determine factors to normalise steering amounts in PID controller
 	maxCap = baseSpeed/maxLight;
 	minCap = baseSpeed/minLight;
@@ -385,6 +395,7 @@ task main(){
 	for(int i=0; i<windowSize; i++){ //Init sliding windows
 		loLightReadings[i] = minLight;
 		hiLightReadings[i] = maxLight;
+		midLightReadings[i] = setPt;
 	}
 
 	//start robot after button press
